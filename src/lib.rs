@@ -2,6 +2,7 @@ use calamine::{open_workbook, Reader, Xlsx};
 use serde::{Deserialize, Serialize};
 use serde_json::{Result, Value};
 use std::{fs, path::Path};
+
 mod sbom4;
 mod sbom5;
 
@@ -51,7 +52,12 @@ fn sbom_read(pt: String) -> Result<()> {
     if let Some(field) = t.get("specVersion") {
         if field == "1.4" {
             println!("Run parse 1.4");
-            let _ = serde_json::from_str::<sbom4::Root>(&foo).expect("Bad json");
+            let sbom = serde_json::from_str::<sbom4::Root>(&foo).expect("Bad json");
+            if let Some(components) = sbom.components {
+                for component in components {
+                    print!("{}|", component.name);
+                } 
+            }
             println!("Parse Done");
         } else if field == "1.5" {
             println!("Run parse 1.5");
