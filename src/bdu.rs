@@ -18,11 +18,11 @@ pub struct Component {
     /// Название ПО
     pub name: Option<String>,
     /// Версия ПО
-    pub version: Option<String>,
+    pub versions: Option<Vec<String>>,
     /// Тип ПО
     pub type_field: Option<String>,
     /// Наименование ОС и тип аппаратной платформы
-    pub platform: Option<String>,
+    pub platforms: Option<Vec<String>>,
     /// Класс уязвимости
     pub class_vuln: Option<String>,
     /// Дата выявления
@@ -42,7 +42,7 @@ pub struct Component {
     /// Информация об устранении
     pub fix: Option<String>,
     /// Ссылки на источники
-    pub source_sites: Option<String>,
+    pub source_sites: Option<Vec<String>>,
     /// Идентификаторы в других системах
     pub id_another_system: Option<Vec<String>>,
     /// Прочая информация
@@ -62,9 +62,9 @@ pub struct CWE {
     pub id: Option<Vec<String>>,
 }
 
-pub fn xlsx_parser(pt: String, sheet_name: String) -> Option<Vec<Component>> {
-    let mut workbook: Xlsx<_> = open_workbook(Path::new(&pt)).expect("Cannot open file");
-    if let Ok(range) = workbook.worksheet_range(&sheet_name) {
+pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
+    let mut workbook: Xlsx<_> = open_workbook(Path::new(pt)).expect("Cannot open file");
+    if let Ok(range) = workbook.worksheet_range(sheet_name) {
         let mut bdu_components: Vec<Component> = Vec::new();
         for hight in 3..range.get_size().0 {
             bdu_components.push(Component {
@@ -98,11 +98,14 @@ pub fn xlsx_parser(pt: String, sheet_name: String) -> Option<Vec<Component>> {
                         .expect("name")
                         .to_string(),
                 ),
-                version: Some(
+                versions: Some(
                     range
                         .get_value((hight.try_into().unwrap(), 5.try_into().unwrap()))
                         .expect("version")
-                        .to_string(),
+                        .to_string()
+                        .split(", ")
+                        .map(&str::to_string)
+                        .collect(),
                 ),
                 type_field: Some(
                     range
@@ -110,11 +113,14 @@ pub fn xlsx_parser(pt: String, sheet_name: String) -> Option<Vec<Component>> {
                         .expect("type_field")
                         .to_string(),
                 ),
-                platform: Some(
+                platforms: Some(
                     range
                         .get_value((hight.try_into().unwrap(), 7.try_into().unwrap()))
                         .expect("platform")
-                        .to_string(),
+                        .to_string()
+                        .split(", ")
+                        .map(&str::to_string)
+                        .collect(),
                 ),
                 class_vuln: Some(
                     range
@@ -174,7 +180,10 @@ pub fn xlsx_parser(pt: String, sheet_name: String) -> Option<Vec<Component>> {
                     range
                         .get_value((hight.try_into().unwrap(), 17.try_into().unwrap()))
                         .expect("source_sites")
-                        .to_string(),
+                        .to_string()
+                        .split("\n")
+                        .map(str::to_string)
+                        .collect(),
                 ),
                 id_another_system: Some(
                     range

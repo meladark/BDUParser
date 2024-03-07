@@ -102,13 +102,13 @@ mod tests {
     #[test]
     fn test_bdu_parser() {
         let bdu_components = xlsx_parser(
-            String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
-            String::from("Sheet"),
+            &String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
+            &String::from("Sheet"),
         );
         if let Some(components) = bdu_components {
             let file = File::create("bdu.json").expect("File bad");
             let mut writer = BufWriter::new(file);
-            serde_json::to_writer(&mut writer, &components).expect("Kall");
+            serde_json::to_writer(&mut writer, &components[10000..11000]).expect("Kall");
             writer.flush().expect("Pizdec");
         } else {
             println!("Обосрался")
