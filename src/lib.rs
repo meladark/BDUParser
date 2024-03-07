@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Result, Value};
 use std::{fs, path::Path};
 
+mod bdu;
 mod sbom4;
 mod sbom5;
 
@@ -32,7 +33,7 @@ pub fn read_bdu(pt: String, sheet_name: String) {
     //         .flat_map(|r| r.iter().filter(|&c| c != &Data::Empty)).count());
     // }
     if let Ok(range) = workbook.worksheet_range(&sheet_name) {
-        for h in 2..5 {
+        for h in 3..5 {
             for w in 0..range.get_size().1 {
                 let total_cells = range
                     .get_value((h.try_into().unwrap(), w.try_into().unwrap()))
@@ -56,7 +57,7 @@ fn sbom_read(pt: String) -> Result<()> {
             if let Some(components) = sbom.components {
                 for component in components {
                     print!("{}|", component.name);
-                } 
+                }
             }
             println!("Parse Done");
         } else if field == "1.5" {
@@ -71,6 +72,13 @@ fn sbom_read(pt: String) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        fs::File,
+        io::{BufWriter, Write},
+    };
+
+    use self::bdu::xlsx_parser;
+
     use super::*;
 
     #[test]
@@ -78,7 +86,6 @@ mod tests {
         let result = add(2, 2);
         assert_eq!(result, 4);
     }
-
     #[test]
     fn test_read_bdu() {
         read_bdu(
@@ -91,5 +98,20 @@ mod tests {
         let _ = sbom_read(String::from("/home/mike/EXTERNAL/bdu/bom.json"));
         let _ = sbom_read(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
         let _ = sbom_read(String::from("/home/mike/EXTERNAL/bdu/bom (1).json"));
+    }
+    #[test]
+    fn test_bdu_parser() {
+        let bdu_components = xlsx_parser(
+            String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
+            String::from("Sheet"),
+        );
+        if let Some(components) = bdu_components {
+            let file = File::create("bdu.json").expect("File bad");
+            let mut writer = BufWriter::new(file);
+            serde_json::to_writer(&mut writer, &components).expect("Kall");
+            writer.flush().expect("Pizdec");
+        } else {
+            println!("Обосрался")
+        }
     }
 }
