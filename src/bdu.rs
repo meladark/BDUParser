@@ -1,6 +1,9 @@
+
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
+
 use std::path::Path;
+use regex::Regex;
 
 use calamine::{open_workbook, Reader, Xlsx};
 
@@ -17,8 +20,9 @@ pub struct Component {
     pub vendor: Option<String>,
     /// Название ПО
     pub name: Option<String>,
+    pub v_test: Option<Vec<String>>,
     /// Версия ПО
-    pub versions: Option<Vec<String>>,
+    pub versions: Option<Vec<Version>>,
     /// Тип ПО
     pub type_field: Option<String>,
     /// Наименование ОС и тип аппаратной платформы
@@ -51,6 +55,16 @@ pub struct Component {
     pub conn_is: Option<i64>,
     /// CWE
     pub cwe: Option<CWE>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Version {
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub only: Option<String>,
+    pub inclusive: bool,
+    pub name: String
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -98,14 +112,78 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .expect("name")
                         .to_string(),
                 ),
-                versions: Some(
-                    range
+                v_test: Some(range
+                    .get_value((hight.try_into().unwrap(), 5.try_into().unwrap()))
+                    .expect("version")
+                    .to_string()
+                    .split(", ")
+                    .map(&str::to_string)
+                    .collect()
+                ),
+                versions: Some( 
+                    {
+                        let mut ret: Vec<Version> = Vec::new();
+                        // TODO: добавить нормальные формы для всех полей
+                        let re = Regex::new(r"^до (?<to_4>[а-яА-Яa-zA-Z0-9. \(\)-]+) включительно \((?<name_5>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–/-]+)\)$|(?<only>[[[:alnum:]][[:blank:]]\.\(\)]+) \((?<name_1>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^от (?<from_1>[а-яА-Яa-zA-Z0-9. \(\)]+) до (?<to_1>[а-яА-Яa-zA-Z0-9. \(\)]+) включительно \((?<name_2>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^от (?<from_2>[а-яА-Яa-zA-Z0-9. \(\)]+) до (?<to_2>[а-яА-Яa-zA-Z0-9. \(\)]+) \((?<name_3>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^до (?<to_3>[а-яА-Яa-zA-Z0-9. \(\)]+) \((?<name_4>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$").unwrap();
+                        for version in range
                         .get_value((hight.try_into().unwrap(), 5.try_into().unwrap()))
                         .expect("version")
                         .to_string()
                         .split(", ")
                         .map(&str::to_string)
-                        .collect(),
+                        .into_iter() 
+                        {
+                            let Some(caps) = re.captures(&version) else {
+                                continue;
+                            };
+                            ret.push(
+                                Version {
+                                    from: {
+                                        let mut ret = "".to_string();
+                                        let names = ["from_1", "from_2"];
+                                        for name in names {
+                                            let c = caps.name(name).map_or("", |m| m.as_str()).to_string();
+                                            if c != "" {
+                                                ret = c
+                                            }
+                                        } 
+                                        Some(ret)
+                                    },
+                                    to: {
+                                        let mut ret = "".to_string();
+                                        let names = ["to_1", "to_2", "to_3", "to_4"];
+                                        for name in names {
+                                            let c = caps.name(name).map_or("", |m| m.as_str()).to_string();
+                                            if c != "" {
+                                                ret = c
+                                            }
+                                        } 
+                                        Some(ret)
+                                    },
+                                    only: Some(caps.name("only").map_or("", |m| m.as_str()).to_string()),
+                                    inclusive: {
+                                        if caps.name("to_1").map_or("", |m| m.as_str()).to_string() != "" || caps.name("to_4").map_or("", |m| m.as_str()).to_string() != "" {
+                                            true
+                                        }else {
+                                            false
+                                        }
+                                    },
+                                    name: {
+                                        let mut ret = "".to_string();
+                                        let names = ["name_1", "name_2", "name_3", "name_4", "name_5"];
+                                        for name in names {
+                                            let c = caps.name(name).map_or("", |m| m.as_str()).to_string();
+                                            if c != "" {
+                                                ret = c
+                                            }
+                                        }
+                                        ret
+                                    },
+                                }
+                            )
+                        }
+                        ret
+                    }
                 ),
                 type_field: Some(
                     range
