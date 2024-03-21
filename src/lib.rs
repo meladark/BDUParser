@@ -77,7 +77,7 @@ mod tests {
         io::{BufWriter, Write},
     };
 
-    use self::bdu::xlsx_parser;
+    use self::bdu::{find_bugs, xlsx_parser};
 
     use super::*;
 
@@ -108,10 +108,21 @@ mod tests {
         if let Some(components) = bdu_components {
             let file = File::create("bdu.json").expect("File bad");
             let mut writer = BufWriter::new(file);
-            serde_json::to_writer(&mut writer, &components[10000..11000]).expect("Kall");
+            serde_json::to_writer(&mut writer, &components[47000..48000]).expect("Kall");
             writer.flush().expect("Pizdec");
         } else {
             println!("Обосрался")
+        }
+    }
+    #[test]
+    fn test_find_bugs(){
+        let bdu_components = xlsx_parser(
+            &String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
+            &String::from("Sheet"),
+        );
+        let sbom = sbom4::read_sbom(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
+        if let Some(bdu4ka) = bdu_components{
+            find_bugs(&bdu4ka, &sbom)
         }
     }
 }

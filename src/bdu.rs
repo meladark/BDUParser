@@ -1,17 +1,21 @@
-
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
+use rayon::prelude::*;
 
 use std::path::Path;
 use regex::Regex;
 
 use calamine::{open_workbook, Reader, Xlsx};
 
+use crate::bdu;
+use crate::sbom4;
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Элемент компонет с уязвимостью
 pub struct Component {
     /// Идентификатор
-    pub id: Option<String>,
+    pub id: String,
     /// Наименование уязвимости         
     pub name_vuln: Option<String>,
     /// Описание уязвимости  
@@ -19,14 +23,15 @@ pub struct Component {
     /// Вендор ПО
     pub vendor: Option<String>,
     /// Название ПО
-    pub name: Option<String>,
+    pub name: Option<Vec<String>>,
     pub v_test: Option<Vec<String>>,
     /// Версия ПО
     pub versions: Option<Vec<Version>>,
     /// Тип ПО
     pub type_field: Option<String>,
+    pub v_platforms: Option<Vec<String>>,
     /// Наименование ОС и тип аппаратной платформы
-    pub platforms: Option<Vec<String>>,
+    pub platforms: Option<Vec<Platform>>,
     /// Класс уязвимости
     pub class_vuln: Option<String>,
     /// Дата выявления
@@ -76,18 +81,36 @@ pub struct CWE {
     pub id: Option<Vec<String>>,
 }
 
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+/// Платформа, на которой актуальная ошибка 
+pub struct Platform {
+    /// Название платформы
+    pub name: Option<String>,
+    /// Версия платформы
+    pub version: Option<String>
+}
+
+// pub fn xlsx_parser_parallel(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
+//     let mut workbook: Xlsx<_> = open_workbook(Path::new(pt)).expect("Cannot open file");
+//     if let Ok(range) = workbook.worksheet_range(sheet_name) {
+//         let mut bdu_components: Vec<Component> = Vec::new();
+//         
+//         return Some(bdu_components);
+//     }
+//     None
+// }
+
 pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
     let mut workbook: Xlsx<_> = open_workbook(Path::new(pt)).expect("Cannot open file");
     if let Ok(range) = workbook.worksheet_range(sheet_name) {
         let mut bdu_components: Vec<Component> = Vec::new();
         for hight in 3..range.get_size().0 {
             bdu_components.push(Component {
-                id: Some(
-                    range
+                id: range
                         .get_value((hight.try_into().unwrap(), 0.try_into().unwrap()))
                         .expect("Not id")
                         .to_string(),
-                ),
                 name_vuln: Some(
                     range
                         .get_value((hight.try_into().unwrap(), 1.try_into().unwrap()))
@@ -110,7 +133,9 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                     range
                         .get_value((hight.try_into().unwrap(), 4.try_into().unwrap()))
                         .expect("name")
-                        .to_string(),
+                        .to_string().split(", ")
+                        .map(&str::to_string)
+                        .collect(),
                 ),
                 v_test: Some(range
                     .get_value((hight.try_into().unwrap(), 5.try_into().unwrap()))
@@ -131,7 +156,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .to_string()
                         .split(", ")
                         .map(&str::to_string)
-                        .into_iter() 
+                        .into_iter()
                         {
                             let Some(caps) = re.captures(&version) else {
                                 continue;
@@ -191,7 +216,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .expect("type_field")
                         .to_string(),
                 ),
-                platforms: Some(
+                v_platforms: Some(
                     range
                         .get_value((hight.try_into().unwrap(), 7.try_into().unwrap()))
                         .expect("platform")
@@ -199,6 +224,30 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .split(", ")
                         .map(&str::to_string)
                         .collect(),
+                ),
+                platforms: Some(
+                    {
+                        let mut ret: Vec<Platform> = Vec::new();
+                        let re = Regex::new(r"^(?<name>[[[:alnum:]][[:blank:]][а-яА-Яё«»№]]*) \((?<version>[[[:alnum:]][[:blank:]][[:punct:]][а-яА-Яё«»№]]*)\)").unwrap();
+                        for platform in range
+                        .get_value((hight.try_into().unwrap(), 7.try_into().unwrap()))
+                        .expect("platform")
+                        .to_string()
+                        .split(", ")
+                        .map(&str::to_string)
+                        .into_iter(){
+                            let Some(caps) = re.captures(&platform) else {
+                                continue;
+                            };
+                            ret.push(
+                                Platform{
+                                    name: Some(caps.name("name").map_or("", |m| m.as_str()).to_string()),
+                                    version: Some(caps.name("version").map_or("", |m| m.as_str()).to_string()),
+                                }
+                            )
+                        }
+                        ret
+                    }
                 ),
                 class_vuln: Some(
                     range
@@ -261,6 +310,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .to_string()
                         .split("\n")
                         .map(str::to_string)
+                        .filter(|x| x != "")
                         .collect(),
                 ),
                 id_another_system: Some(
@@ -313,3 +363,26 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
         None
     }
 }
+
+
+pub fn find_bugs(bdu_components: &Vec<Component>, sbom: &sbom4::Root) {
+        if let Some(components_sbom) = &sbom.components {
+            for component in components_sbom {
+                for component_bdu in bdu_components {
+                    let mut find = false;
+                    for name_bdu in &component_bdu.name {
+                        for name in name_bdu{
+                            if name == &component.name {
+                                print!("Нашлося: {}\n", name);
+                                find = true;
+                                continue;
+                            }
+                        }
+                    }
+                    if find {
+                        print!("{}\n", &component_bdu.id)
+                     }
+                }
+            }
+        }
+    }
