@@ -2,3 +2,5 @@
 bdu.json
 *.lock
 Cargo.lock
+postgres_data
+.vscode

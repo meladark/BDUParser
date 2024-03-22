@@ -6,6 +6,7 @@ use std::{fs, path::Path};
 mod bdu;
 mod sbom4;
 mod sbom5;
+mod bd;
 
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize, Debug)]
@@ -77,7 +78,7 @@ mod tests {
         io::{BufWriter, Write},
     };
 
-    use self::bdu::{find_bugs, xlsx_parser};
+    use self::{bd::connect, bdu::{find_bugs, xlsx_parser}};
 
     use super::*;
 
@@ -124,5 +125,9 @@ mod tests {
         if let Some(bdu4ka) = bdu_components{
             find_bugs(&bdu4ka, &sbom)
         }
+    }
+    #[test]
+    fn test_postgres(){
+        connect();
     }
 }
