@@ -1,13 +1,11 @@
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
-use rayon::prelude::*;
 
 use std::path::Path;
 use regex::Regex;
 
 use calamine::{open_workbook, Reader, Xlsx};
 
-use crate::bdu;
 use crate::sbom4;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,14 +19,14 @@ pub struct Component {
     /// Описание уязвимости  
     pub desc_vuln: Option<String>,
     /// Вендор ПО
-    pub vendor: Option<String>,
+    pub vendors: Option<Vec<String>>,
     /// Название ПО
     pub name: Option<Vec<String>>,
     pub v_test: Option<Vec<String>>,
     /// Версия ПО
     pub versions: Option<Vec<Version>>,
     /// Тип ПО
-    pub type_field: Option<String>,
+    pub software_types: Option<Vec<String>>,
     pub v_platforms: Option<Vec<String>>,
     /// Наименование ОС и тип аппаратной платформы
     pub platforms: Option<Vec<Platform>>,
@@ -123,11 +121,14 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .expect("desc_vuln")
                         .to_string(),
                 ),
-                vendor: Some(
+                vendors: Some(
                     range
                         .get_value((hight.try_into().unwrap(), 3.try_into().unwrap()))
                         .expect("vendor")
-                        .to_string(),
+                        .to_string()
+                        .split(", ")
+                        .map(&str::to_string)
+                        .collect(),
                 ),
                 name: Some(
                     range
@@ -210,11 +211,14 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         ret
                     }
                 ),
-                type_field: Some(
+                software_types: Some(
                     range
                         .get_value((hight.try_into().unwrap(), 6.try_into().unwrap()))
                         .expect("type_field")
-                        .to_string(),
+                        .to_string()
+                        .split(", ")
+                        .map(&str::to_string)
+                        .collect(),
                 ),
                 v_platforms: Some(
                     range

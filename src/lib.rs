@@ -110,7 +110,9 @@ mod tests {
             let file = File::create("bdu.json").expect("File bad");
             let mut writer = BufWriter::new(file);
             serde_json::to_writer(&mut writer, &components[47000..48000]).expect("Kall");
-            writer.flush().expect("Pizdec");
+            writer
+            .flush()
+            .expect("Pizdec");
         } else {
             println!("Обосрался")
         }
