@@ -78,7 +78,7 @@ mod tests {
         io::{BufWriter, Write},
     };
 
-    use self::{bd::connect, bdu::{find_bugs, xlsx_parser}};
+    use self::{bd::connect_create, bdu::{find_bugs, xlsx_parser}};
 
     use super::*;
 
@@ -130,6 +130,13 @@ mod tests {
     }
     #[test]
     fn test_postgres(){
-        connect();
+        let bdu_components = xlsx_parser(
+            &String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
+            &String::from("Sheet"),
+        );
+        if let Some(ebu4ka) = bdu_components{
+           connect_create(&ebu4ka); 
+        }
+        //connect_create(); 
     }
 }

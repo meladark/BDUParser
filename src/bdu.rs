@@ -55,9 +55,9 @@ pub struct Component {
     /// Прочая информация
     pub info: Option<String>,
     /// Связь с инцидентами ИБ
-    pub conn_is: Option<i64>,
+    pub conn_is: Option<i32>,
     /// CWE
-    pub cwe: Option<CWE>,
+    pub cwe: CWE,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -340,7 +340,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .parse()
                         .unwrap(),
                 ),
-                cwe: Some(CWE {
+                cwe: CWE {
                     info: Some(
                         range
                             .get_value((hight.try_into().unwrap(), 21.try_into().unwrap()))
@@ -359,7 +359,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                             .map(str::to_string)
                             .collect(),
                     ),
-                }),
+                },
             })
         }
         Some(bdu_components)
