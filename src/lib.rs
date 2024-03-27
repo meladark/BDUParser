@@ -1,7 +1,7 @@
-use calamine::{open_workbook, Reader, Xlsx};
-use serde::{Deserialize, Serialize};
-use serde_json::{Result, Value};
-use std::{fs, path::Path};
+use calamine::{ open_workbook, Reader, Xlsx };
+use serde::{ Deserialize, Serialize };
+use serde_json::{ Result, Value };
+use std::{ fs, path::Path };
 
 mod bdu;
 mod sbom4;
@@ -41,7 +41,7 @@ pub fn read_bdu(pt: String, sheet_name: String) {
                     .expect("Not position");
                 print!("{} ", total_cells);
             }
-            println!("\n----------")
+            println!("\n----------");
         }
     }
 }
@@ -73,12 +73,9 @@ fn sbom_read(pt: String) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs::File,
-        io::{BufWriter, Write},
-    };
+    use std::{ fs::File, io::{ BufWriter, Write } };
 
-    use self::{bd::connect_create, bdu::{find_bugs, xlsx_parser}};
+    use self::{ bd::connect_create, bdu::{ find_bugs, xlsx_parser } };
 
     use super::*;
 
@@ -89,10 +86,7 @@ mod tests {
     }
     #[test]
     fn test_read_bdu() {
-        read_bdu(
-            String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
-            String::from("Sheet"),
-        );
+        read_bdu(String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"), String::from("Sheet"));
     }
     #[test]
     fn test_read_json() {
@@ -104,39 +98,37 @@ mod tests {
     fn test_bdu_parser() {
         let bdu_components = xlsx_parser(
             &String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
-            &String::from("Sheet"),
+            &String::from("Sheet")
         );
         if let Some(components) = bdu_components {
             let file = File::create("bdu.json").expect("File bad");
             let mut writer = BufWriter::new(file);
             serde_json::to_writer(&mut writer, &components[47000..48000]).expect("Kall");
-            writer
-            .flush()
-            .expect("Pizdec");
+            writer.flush().expect("Pizdec");
         } else {
             println!("Обосрался")
         }
     }
     #[test]
-    fn test_find_bugs(){
+    fn test_find_bugs() {
         let bdu_components = xlsx_parser(
             &String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
-            &String::from("Sheet"),
+            &String::from("Sheet")
         );
         let sbom = sbom4::read_sbom(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
-        if let Some(bdu4ka) = bdu_components{
+        if let Some(bdu4ka) = bdu_components {
             find_bugs(&bdu4ka, &sbom)
         }
     }
     #[test]
-    fn test_postgres(){
+    fn test_postgres() {
         let bdu_components = xlsx_parser(
             &String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
-            &String::from("Sheet"),
+            &String::from("Sheet")
         );
-        if let Some(ebu4ka) = bdu_components{
-           connect_create(&ebu4ka); 
+        if let Some(ebu4ka) = bdu_components {
+            connect_create(&ebu4ka);
         }
-        //connect_create(); 
+        //connect_create();
     }
 }

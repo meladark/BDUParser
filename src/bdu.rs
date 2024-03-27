@@ -4,7 +4,7 @@ use serde_derive::Serialize;
 use std::path::Path;
 use regex::Regex;
 
-use calamine::{open_workbook, Reader, Xlsx};
+use calamine::{ open_workbook, Reader, Xlsx };
 
 use crate::sbom4;
 
@@ -14,9 +14,9 @@ use crate::sbom4;
 pub struct Component {
     /// Идентификатор
     pub id: String,
-    /// Наименование уязвимости         
+    /// Наименование уязвимости
     pub name_vuln: Option<String>,
-    /// Описание уязвимости  
+    /// Описание уязвимости
     pub desc_vuln: Option<String>,
     /// Вендор ПО
     pub vendors: Option<Vec<String>>,
@@ -67,7 +67,7 @@ pub struct Version {
     pub to: Option<String>,
     pub only: Option<String>,
     pub inclusive: bool,
-    pub name: String
+    pub name: String,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -81,19 +81,19 @@ pub struct CWE {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-/// Платформа, на которой актуальная ошибка 
+/// Платформа, на которой актуальная ошибка
 pub struct Platform {
     /// Название платформы
     pub name: Option<String>,
     /// Версия платформы
-    pub version: Option<String>
+    pub version: Option<String>,
 }
 
 // pub fn xlsx_parser_parallel(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
 //     let mut workbook: Xlsx<_> = open_workbook(Path::new(pt)).expect("Cannot open file");
 //     if let Ok(range) = workbook.worksheet_range(sheet_name) {
 //         let mut bdu_components: Vec<Component> = Vec::new();
-//         
+//
 //         return Some(bdu_components);
 //     }
 //     None
@@ -106,261 +106,291 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
         for hight in 3..range.get_size().0 {
             bdu_components.push(Component {
                 id: range
-                        .get_value((hight.try_into().unwrap(), 0.try_into().unwrap()))
-                        .expect("Not id")
-                        .to_string(),
+                    .get_value((hight.try_into().unwrap(), (0).try_into().unwrap()))
+                    .expect("Not id")
+                    .to_string(),
                 name_vuln: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 1.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (1).try_into().unwrap()))
                         .expect("Not name_vuln")
-                        .to_string(),
+                        .to_string()
                 ),
                 desc_vuln: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 2.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (2).try_into().unwrap()))
                         .expect("desc_vuln")
-                        .to_string(),
+                        .to_string()
                 ),
                 vendors: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 3.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (3).try_into().unwrap()))
                         .expect("vendor")
                         .to_string()
                         .split(", ")
                         .map(&str::to_string)
-                        .collect(),
+                        .collect()
                 ),
                 name: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 4.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (4).try_into().unwrap()))
                         .expect("name")
-                        .to_string().split(", ")
+                        .to_string()
+                        .split(", ")
                         .map(&str::to_string)
-                        .collect(),
+                        .collect()
                 ),
-                v_test: Some(range
-                    .get_value((hight.try_into().unwrap(), 5.try_into().unwrap()))
-                    .expect("version")
-                    .to_string()
-                    .split(", ")
-                    .map(&str::to_string)
-                    .collect()
-                ),
-                versions: Some( 
-                    {
-                        let mut ret: Vec<Version> = Vec::new();
-                        // TODO: добавить нормальные формы для всех полей
-                        let re = Regex::new(r"^до (?<to_4>[а-яА-Яa-zA-Z0-9. \(\)-]+) включительно \((?<name_5>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–/-]+)\)$|(?<only>[[[:alnum:]][[:blank:]]\.\(\)]+) \((?<name_1>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^от (?<from_1>[а-яА-Яa-zA-Z0-9. \(\)]+) до (?<to_1>[а-яА-Яa-zA-Z0-9. \(\)]+) включительно \((?<name_2>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^от (?<from_2>[а-яА-Яa-zA-Z0-9. \(\)]+) до (?<to_2>[а-яА-Яa-zA-Z0-9. \(\)]+) \((?<name_3>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^до (?<to_3>[а-яА-Яa-zA-Z0-9. \(\)]+) \((?<name_4>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$").unwrap();
-                        for version in range
-                        .get_value((hight.try_into().unwrap(), 5.try_into().unwrap()))
+                v_test: Some(
+                    range
+                        .get_value((hight.try_into().unwrap(), (5).try_into().unwrap()))
                         .expect("version")
                         .to_string()
                         .split(", ")
                         .map(&str::to_string)
-                        .into_iter()
-                        {
-                            let Some(caps) = re.captures(&version) else {
-                                continue;
-                            };
-                            ret.push(
-                                Version {
-                                    from: {
-                                        let mut ret = "".to_string();
-                                        let names = ["from_1", "from_2"];
-                                        for name in names {
-                                            let c = caps.name(name).map_or("", |m| m.as_str()).to_string();
-                                            if c != "" {
-                                                ret = c
-                                            }
-                                        } 
-                                        Some(ret)
-                                    },
-                                    to: {
-                                        let mut ret = "".to_string();
-                                        let names = ["to_1", "to_2", "to_3", "to_4"];
-                                        for name in names {
-                                            let c = caps.name(name).map_or("", |m| m.as_str()).to_string();
-                                            if c != "" {
-                                                ret = c
-                                            }
-                                        } 
-                                        Some(ret)
-                                    },
-                                    only: Some(caps.name("only").map_or("", |m| m.as_str()).to_string()),
-                                    inclusive: {
-                                        if caps.name("to_1").map_or("", |m| m.as_str()).to_string() != "" || caps.name("to_4").map_or("", |m| m.as_str()).to_string() != "" {
-                                            true
-                                        }else {
-                                            false
-                                        }
-                                    },
-                                    name: {
-                                        let mut ret = "".to_string();
-                                        let names = ["name_1", "name_2", "name_3", "name_4", "name_5"];
-                                        for name in names {
-                                            let c = caps.name(name).map_or("", |m| m.as_str()).to_string();
-                                            if c != "" {
-                                                ret = c
-                                            }
-                                        }
-                                        ret
-                                    },
-                                }
-                            )
-                        }
-                        ret
-                    }
+                        .collect()
                 ),
+                versions: Some({
+                    let mut ret: Vec<Version> = Vec::new();
+                    // TODO: добавить нормальные формы для всех полей
+                    let re = Regex::new(
+                        r"^до (?<to_4>[а-яА-Яa-zA-Z0-9. \(\)-]+) включительно \((?<name_5>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–/-]+)\)$|(?<only>[[[:alnum:]][[:blank:]]\.\(\)]+) \((?<name_1>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^от (?<from_1>[а-яА-Яa-zA-Z0-9. \(\)]+) до (?<to_1>[а-яА-Яa-zA-Z0-9. \(\)]+) включительно \((?<name_2>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^от (?<from_2>[а-яА-Яa-zA-Z0-9. \(\)]+) до (?<to_2>[а-яА-Яa-zA-Z0-9. \(\)]+) \((?<name_3>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^до (?<to_3>[а-яА-Яa-zA-Z0-9. \(\)]+) \((?<name_4>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$"
+                    ).unwrap();
+                    for version in range
+                        .get_value((hight.try_into().unwrap(), (5).try_into().unwrap()))
+                        .expect("version")
+                        .to_string()
+                        .split(", ")
+                        .map(&str::to_string)
+                        .into_iter() {
+                        let Some(caps) = re.captures(&version) else {
+                            continue;
+                        };
+                        ret.push(Version {
+                            from: {
+                                let mut ret = "".to_string();
+                                let names = ["from_1", "from_2"];
+                                for name in names {
+                                    let c = caps
+                                        .name(name)
+                                        .map_or("", |m| m.as_str())
+                                        .to_string();
+                                    if c != "" {
+                                        ret = c;
+                                    }
+                                }
+                                Some(ret)
+                            },
+                            to: {
+                                let mut ret = "".to_string();
+                                let names = ["to_1", "to_2", "to_3", "to_4"];
+                                for name in names {
+                                    let c = caps
+                                        .name(name)
+                                        .map_or("", |m| m.as_str())
+                                        .to_string();
+                                    if c != "" {
+                                        ret = c;
+                                    }
+                                }
+                                Some(ret)
+                            },
+                            only: Some(
+                                caps
+                                    .name("only")
+                                    .map_or("", |m| m.as_str())
+                                    .to_string()
+                            ),
+                            inclusive: {
+                                if
+                                    caps
+                                        .name("to_1")
+                                        .map_or("", |m| m.as_str())
+                                        .to_string() != "" ||
+                                    caps
+                                        .name("to_4")
+                                        .map_or("", |m| m.as_str())
+                                        .to_string() != ""
+                                {
+                                    true
+                                } else {
+                                    false
+                                }
+                            },
+                            name: {
+                                let mut ret = "".to_string();
+                                let names = ["name_1", "name_2", "name_3", "name_4", "name_5"];
+                                for name in names {
+                                    let c = caps
+                                        .name(name)
+                                        .map_or("", |m| m.as_str())
+                                        .to_string();
+                                    if c != "" {
+                                        ret = c;
+                                    }
+                                }
+                                ret
+                            },
+                        });
+                    }
+                    ret
+                }),
                 software_types: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 6.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (6).try_into().unwrap()))
                         .expect("type_field")
                         .to_string()
                         .split(", ")
                         .map(&str::to_string)
-                        .collect(),
+                        .collect()
                 ),
                 v_platforms: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 7.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (7).try_into().unwrap()))
                         .expect("platform")
                         .to_string()
                         .split(", ")
                         .map(&str::to_string)
-                        .collect(),
+                        .collect()
                 ),
-                platforms: Some(
-                    {
-                        let mut ret: Vec<Platform> = Vec::new();
-                        let re = Regex::new(r"^(?<name>[[[:alnum:]][[:blank:]][а-яА-Яё«»№]]*) \((?<version>[[[:alnum:]][[:blank:]][[:punct:]][а-яА-Яё«»№]]*)\)").unwrap();
-                        for platform in range
-                        .get_value((hight.try_into().unwrap(), 7.try_into().unwrap()))
+                platforms: Some({
+                    let mut ret: Vec<Platform> = Vec::new();
+                    let re = Regex::new(
+                        r"^(?<name>[[[:alnum:]][[:blank:]][а-яА-Яё«»№]]*) \((?<version>[[[:alnum:]][[:blank:]][[:punct:]][а-яА-Яё«»№]]*)\)"
+                    ).unwrap();
+                    for platform in range
+                        .get_value((hight.try_into().unwrap(), (7).try_into().unwrap()))
                         .expect("platform")
                         .to_string()
                         .split(", ")
                         .map(&str::to_string)
-                        .into_iter(){
-                            let Some(caps) = re.captures(&platform) else {
-                                continue;
-                            };
-                            ret.push(
-                                Platform{
-                                    name: Some(caps.name("name").map_or("", |m| m.as_str()).to_string()),
-                                    version: Some(caps.name("version").map_or("", |m| m.as_str()).to_string()),
-                                }
-                            )
-                        }
-                        ret
+                        .into_iter() {
+                        let Some(caps) = re.captures(&platform) else {
+                            continue;
+                        };
+                        ret.push(Platform {
+                            name: Some(
+                                caps
+                                    .name("name")
+                                    .map_or("", |m| m.as_str())
+                                    .to_string()
+                            ),
+                            version: Some(
+                                caps
+                                    .name("version")
+                                    .map_or("", |m| m.as_str())
+                                    .to_string()
+                            ),
+                        });
                     }
-                ),
+                    ret
+                }),
                 class_vuln: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 8.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (8).try_into().unwrap()))
                         .expect("class_vuln")
-                        .to_string(),
+                        .to_string()
                 ),
                 date: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 9.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (9).try_into().unwrap()))
                         .expect("date")
-                        .to_string(),
+                        .to_string()
                 ),
                 cvss2: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 10.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (10).try_into().unwrap()))
                         .expect("cvss2")
-                        .to_string(),
+                        .to_string()
                 ),
                 cvss3: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 11.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (11).try_into().unwrap()))
                         .expect("cvss3")
-                        .to_string(),
+                        .to_string()
                 ),
                 severity: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 12.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (12).try_into().unwrap()))
                         .expect("severity")
-                        .to_string(),
+                        .to_string()
                 ),
                 possible_fix: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 13.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (13).try_into().unwrap()))
                         .expect("possible_fix")
-                        .to_string(),
+                        .to_string()
                 ),
                 status_vuln: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 14.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (14).try_into().unwrap()))
                         .expect("status_vuln")
-                        .to_string(),
+                        .to_string()
                 ),
                 exploit: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 15.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (15).try_into().unwrap()))
                         .expect("exploit")
-                        .to_string(),
+                        .to_string()
                 ),
                 fix: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 16.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (16).try_into().unwrap()))
                         .expect("fix")
-                        .to_string(),
+                        .to_string()
                 ),
                 source_sites: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 17.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (17).try_into().unwrap()))
                         .expect("source_sites")
                         .to_string()
                         .split("\n")
                         .map(str::to_string)
                         .filter(|x| x != "")
-                        .collect(),
+                        .collect()
                 ),
                 id_another_system: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 18.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (18).try_into().unwrap()))
                         .expect("id_another_system")
                         .to_string()
                         .split(", ")
                         .map(str::to_string)
-                        .collect(),
+                        .collect()
                 ),
                 info: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 19.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (19).try_into().unwrap()))
                         .expect("info")
-                        .to_string(),
+                        .to_string()
                 ),
                 conn_is: Some(
                     range
-                        .get_value((hight.try_into().unwrap(), 20.try_into().unwrap()))
+                        .get_value((hight.try_into().unwrap(), (20).try_into().unwrap()))
                         .expect("conn_is")
                         .to_string()
                         .parse()
-                        .unwrap(),
+                        .unwrap()
                 ),
                 cwe: CWE {
                     info: Some(
                         range
-                            .get_value((hight.try_into().unwrap(), 21.try_into().unwrap()))
+                            .get_value((hight.try_into().unwrap(), (21).try_into().unwrap()))
                             .expect("cwe info")
                             .to_string()
                             .split(", ")
                             .map(str::to_string)
-                            .collect(),
+                            .collect()
                     ),
                     id: Some(
                         range
-                            .get_value((hight.try_into().unwrap(), 22.try_into().unwrap()))
+                            .get_value((hight.try_into().unwrap(), (22).try_into().unwrap()))
                             .expect("cwe id")
                             .to_string()
                             .split(", ")
                             .map(str::to_string)
-                            .collect(),
+                            .collect()
                     ),
                 },
-            })
+            });
         }
         Some(bdu_components)
     } else {
@@ -368,25 +398,24 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
     }
 }
 
-
 pub fn find_bugs(bdu_components: &Vec<Component>, sbom: &sbom4::Root) {
-        if let Some(components_sbom) = &sbom.components {
-            for component in components_sbom {
-                for component_bdu in bdu_components {
-                    let mut find = false;
-                    for name_bdu in &component_bdu.name {
-                        for name in name_bdu{
-                            if name == &component.name {
-                                print!("Нашлося: {}\n", name);
-                                find = true;
-                                continue;
-                            }
+    if let Some(components_sbom) = &sbom.components {
+        for component in components_sbom {
+            for component_bdu in bdu_components {
+                let mut find = false;
+                for name_bdu in &component_bdu.name {
+                    for name in name_bdu {
+                        if name == &component.name {
+                            print!("Нашлося: {}\n", name);
+                            find = true;
+                            continue;
                         }
                     }
-                    if find {
-                        print!("{}\n", &component_bdu.id)
-                     }
+                }
+                if find {
+                    print!("{}\n", &component_bdu.id);
                 }
             }
         }
     }
+}
