@@ -98,7 +98,7 @@ pub struct Platform {
 //     }
 //     None
 // }
-
+#[allow(dead_code)]
 pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
     let mut workbook: Xlsx<_> = open_workbook(Path::new(pt)).expect("Cannot open file");
     if let Ok(range) = workbook.worksheet_range(sheet_name) {
@@ -152,7 +152,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                     let mut ret: Vec<Version> = Vec::new();
                     // TODO: добавить нормальные формы для всех полей
                     let re = Regex::new(
-                        r"^до (?<to_4>[а-яА-Яa-zA-Z0-9. \(\)-]+) включительно \((?<name_5>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–/-]+)\)$|(?<only>[[[:alnum:]][[:blank:]]\.\(\)]+) \((?<name_1>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^от (?<from_1>[а-яА-Яa-zA-Z0-9. \(\)]+) до (?<to_1>[а-яА-Яa-zA-Z0-9. \(\)]+) включительно \((?<name_2>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^от (?<from_2>[а-яА-Яa-zA-Z0-9. \(\)]+) до (?<to_2>[а-яА-Яa-zA-Z0-9. \(\)]+) \((?<name_3>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$|^до (?<to_3>[а-яА-Яa-zA-Z0-9. \(\)]+) \((?<name_4>[[[:alnum:]][[:blank:]][а-яА-Я][[:punct:]]/–]+)\)$"
+                        r"^до (?<to_4>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) включительно \((?<name_5>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*)\)$|^от (?<from_1>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) до (?<to_1>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) включительно \((?<name_2>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*)\)$|^от (?<from_2>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) до (?<to_2>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) \((?<name_3>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*)\)$|^до (?<to_3>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) \((?<name_4>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*)\)$|(?<only>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) \((?<name_1>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*)\)$"
                     ).unwrap();
                     for version in range
                         .get_value((hight.try_into().unwrap(), (5).try_into().unwrap()))
@@ -254,7 +254,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                 platforms: Some({
                     let mut ret: Vec<Platform> = Vec::new();
                     let re = Regex::new(
-                        r"^(?<name>[[[:alnum:]][[:blank:]][а-яА-Яё«»№]]*) \((?<version>[[[:alnum:]][[:blank:]][[:punct:]][а-яА-Яё«»№]]*)\)"
+                        r"^(?<name>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) \((?<version>[[[:alnum:]][[:blank:]][[:punct:]][а-яА-Яё«»№-]]*)\)"
                     ).unwrap();
                     for platform in range
                         .get_value((hight.try_into().unwrap(), (7).try_into().unwrap()))
@@ -398,6 +398,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
     }
 }
 
+#[allow(dead_code)]
 pub fn find_bugs(bdu_components: &Vec<Component>, sbom: &sbom4::Root) {
     if let Some(components_sbom) = &sbom.components {
         for component in components_sbom {

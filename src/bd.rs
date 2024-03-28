@@ -1,15 +1,13 @@
-use std::{ ffi::FromBytesUntilNulError, ops::ControlFlow, str::from_utf8_unchecked };
-
 // extern crate postgres;
 // use include_postgres_sql::{include_sql, impl_sql};
-use postgres::{ fallible_iterator::Cloned, Client, NoTls };
-use rayon::str::ParallelString;
+use postgres::{ Client, NoTls };
 use regex::Regex;
-use crate::bdu::{ self, Component, Platform, Version, CWE };
+use crate::{ bdu::Component, sbom4 };
 
 // include_sql!("../bdu_sql/same.sql");
 
 // postgresql://bdu:bdu@localhost:5433/bdu user=bdu password=bdu dbname=bdu host=localhost port=64111 connect_timeout=10 keepalives=0 components: &Vec<Component>
+#[allow(dead_code)]
 pub fn connect_create(components: &Vec<Component>) {
     let mut client = Client::connect("postgresql://bdu:bdu@localhost:5433/bdu", NoTls).expect(
         "Error connection!"
@@ -104,8 +102,7 @@ pub fn connect_create(components: &Vec<Component>) {
         ON DELETE NO ACTION
         NOT VALID;
 
-    END;
-"
+    END;"
         )
         .expect("Error batch_execute");
 
@@ -115,120 +112,120 @@ pub fn connect_create(components: &Vec<Component>) {
     //     "INSERT INTO person (name, data) VALUES ($1, $2)",
     //     &[&name, &data],
     // ).expect("Error execute");
-    let component = Component {
-        id: "BDU:2023-03670".to_string(),
-        name_vuln: Some(
-            "Уязвимость реализации протокола Bluetooth Classic спецификации Bluetooth Core Specification, позволяющая нарушителю раскрыть защищаемую информацию".to_string()
-        ),
-        desc_vuln: Some(
-            "Уязвимость функции mctp_unregister() ядра операционных систем Linux связана с использованием памяти после ее освобождения при обработке объекта mdev->addrs. Эксплуатация уязвимости может позволить нарушителю вызвать отказ в обслуживании".to_string()
-        ),
-        vendors: Some(
-            [
-                "ООО «РусБИТех-Астра»".to_string(),
-                "ООО «Ред Софт»".to_string(),
-                "Сообщество свободного программного обеспечения".to_string(),
-            ].to_vec()
-        ),
-        name: Some(
-            [
-                "Astra Linux Special Edition (запись в едином реестре российских программ №369)".to_string(),
-                "РЕД ОС (запись в едином реестре российских программ №3751)".to_string(),
-                "Linux".to_string(),
-            ].to_vec()
-        ),
-        v_test: Some([].to_vec()),
-        versions: Some(
-            [
-                Version {
-                    from: Some("".to_string()),
-                    to: Some("".to_string()),
-                    only: Some("7.3".to_string()),
-                    inclusive: false,
-                    name: "РЕД ОС".to_string(),
-                },
-                Version {
-                    from: Some("".to_string()),
-                    to: Some("".to_string()),
-                    only: Some("1.7".to_string()),
-                    inclusive: false,
-                    name: "Astra Linux Special Edition".to_string(),
-                },
-                Version {
-                    from: Some("5.15".to_string()),
-                    to: Some("5.17.5".to_string()),
-                    only: Some("".to_string()),
-                    inclusive: true,
-                    name: "Linux".to_string(),
-                },
-            ].to_vec()
-        ),
-        software_types: Some(["Операционная система".to_string()].to_vec()),
-        v_platforms: Some([].to_vec()),
-        platforms: Some(
-            [
-                Platform {
-                    name: Some("Astra Linux Special Edition".to_string()),
-                    version: Some(
-                        "1.6 «Смоленск»; запись в едином реестре российских программ №369".to_string()
-                    ),
-                },
-                Platform {
-                    name: Some("РЕД ОС".to_string()),
-                    version: Some(
-                        "7.3; запись в едином реестре российских программ №3751".to_string()
-                    ),
-                },
-                Platform {
-                    name: Some("Astra Linux Special Edition".to_string()),
-                    version: Some(
-                        "1.7; запись в едином реестре российских программ №369".to_string()
-                    ),
-                },
-                Platform {
-                    name: Some("Linux".to_string()),
-                    version: Some("от 5.15 до 5.17.5 включительно".to_string()),
-                },
-            ].to_vec()
-        ),
-        class_vuln: Some("Уязвимость кода".to_string()),
-        date: Some("22.04.2022".to_string()),
-        cvss2: Some("AV:L/AC:L/Au:S/C:N/I:N/A:C".to_string()),
-        cvss3: Some("AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H".to_string()),
-        severity: Some(
-            "Средний уровень опасности (базовая оценка CVSS 2.0 составляет 4,6)\nСредний уровень опасности (базовая оценка CVSS 3.0 составляет 5,5)".to_string()
-        ),
-        possible_fix: Some(
-            "Использование рекомендаций:\nhttps://kernel.org/pub/linux/kernel/v5.x/ChangeLog-5.17.6\n\nДля РедОС: http://repo.red-soft.ru/redos/7.3c/x86_64/updates/\n\nДля ОС Astra Linux Special Edition 1.7:\nобновить пакет linux-5.15 до 5.15.0-83.astra1+ci14 или более высокой версии, используя рекомендации производителя: https://wiki.astralinux.ru/astra-linux-se17-bulletin-2023-1023SE17\n\nДля Astra Linux 1.6 «Смоленск»:\nобновить пакет linux-5.15 до 5.15.0-83.astra1+ci36 или более высокой версии, используя рекомендации производителя: https://wiki.astralinux.ru/astra-linux-se16-bulletin-20231214SE16".to_string()
-        ),
-        status_vuln: Some("Подтверждена производителем".to_string()),
-        exploit: Some("Существует в открытом доступе".to_string()),
-        fix: Some("Уязвимость устранена".to_string()),
-        source_sites: Some(
-            [
-                "https://www.linuxkernelcves.com/cves/CVE-2023-3439".to_string(),
-                "https://access.redhat.com/security/cve/CVE-2023-3439".to_string(),
-                "https://kernel.org/pub/linux/kernel/v5.x/ChangeLog-5.17.6".to_string(),
-                "http://www.openwall.com/lists/oss-security/2023/07/02/1 ".to_string(),
-                "https://bugzilla.redhat.com/show_bug.cgi?id=2217915".to_string(),
-                "http://repo.red-soft.ru/redos/7.3c/x86_64/updates/".to_string(),
-                "https://wiki.astralinux.ru/astra-linux-se17-bulletin-2023-1023SE17".to_string(),
-                "https://wiki.astralinux.ru/astra-linux-se16-bulletin-20231214SE16".to_string(),
-            ].to_vec()
-        ),
-        id_another_system: Some(["CVE-2023-3439".to_string()].to_vec()),
-        info: Some("".to_string()),
-        conn_is: Some(0),
-        cwe: CWE {
-            info: Some(
-                [
-                    "Одновременное выполнение с использованием общего ресурса с неправильной синхронизацией («Ситуация гонки»)".to_string(),
-                    "Использование после освобождения".to_string(),
-                ].to_vec()
-            ),
-            id: Some(["CWE-362".to_string(), "CWE-416".to_string()].to_vec()),
-        },
-    };
+    // let component = Component {
+    //     id: "BDU:2023-03670".to_string(),
+    //     name_vuln: Some(
+    //         "Уязвимость реализации протокола Bluetooth Classic спецификации Bluetooth Core Specification, позволяющая нарушителю раскрыть защищаемую информацию".to_string()
+    //     ),
+    //     desc_vuln: Some(
+    //         "Уязвимость функции mctp_unregister() ядра операционных систем Linux связана с использованием памяти после ее освобождения при обработке объекта mdev->addrs. Эксплуатация уязвимости может позволить нарушителю вызвать отказ в обслуживании".to_string()
+    //     ),
+    //     vendors: Some(
+    //         [
+    //             "ООО «РусБИТех-Астра»".to_string(),
+    //             "ООО «Ред Софт»".to_string(),
+    //             "Сообщество свободного программного обеспечения".to_string(),
+    //         ].to_vec()
+    //     ),
+    //     name: Some(
+    //         [
+    //             "Astra Linux Special Edition (запись в едином реестре российских программ №369)".to_string(),
+    //             "РЕД ОС (запись в едином реестре российских программ №3751)".to_string(),
+    //             "Linux".to_string(),
+    //         ].to_vec()
+    //     ),
+    //     v_test: Some([].to_vec()),
+    //     versions: Some(
+    //         [
+    //             Version {
+    //                 from: Some("".to_string()),
+    //                 to: Some("".to_string()),
+    //                 only: Some("7.3".to_string()),
+    //                 inclusive: false,
+    //                 name: "РЕД ОС".to_string(),
+    //             },
+    //             Version {
+    //                 from: Some("".to_string()),
+    //                 to: Some("".to_string()),
+    //                 only: Some("1.7".to_string()),
+    //                 inclusive: false,
+    //                 name: "Astra Linux Special Edition".to_string(),
+    //             },
+    //             Version {
+    //                 from: Some("5.15".to_string()),
+    //                 to: Some("5.17.5".to_string()),
+    //                 only: Some("".to_string()),
+    //                 inclusive: true,
+    //                 name: "Linux".to_string(),
+    //             },
+    //         ].to_vec()
+    //     ),
+    //     software_types: Some(["Операционная система".to_string()].to_vec()),
+    //     v_platforms: Some([].to_vec()),
+    //     platforms: Some(
+    //         [
+    //             Platform {
+    //                 name: Some("Astra Linux Special Edition".to_string()),
+    //                 version: Some(
+    //                     "1.6 «Смоленск»; запись в едином реестре российских программ №369".to_string()
+    //                 ),
+    //             },
+    //             Platform {
+    //                 name: Some("РЕД ОС".to_string()),
+    //                 version: Some(
+    //                     "7.3; запись в едином реестре российских программ №3751".to_string()
+    //                 ),
+    //             },
+    //             Platform {
+    //                 name: Some("Astra Linux Special Edition".to_string()),
+    //                 version: Some(
+    //                     "1.7; запись в едином реестре российских программ №369".to_string()
+    //                 ),
+    //             },
+    //             Platform {
+    //                 name: Some("Linux".to_string()),
+    //                 version: Some("от 5.15 до 5.17.5 включительно".to_string()),
+    //             },
+    //         ].to_vec()
+    //     ),
+    //     class_vuln: Some("Уязвимость кода".to_string()),
+    //     date: Some("22.04.2022".to_string()),
+    //     cvss2: Some("AV:L/AC:L/Au:S/C:N/I:N/A:C".to_string()),
+    //     cvss3: Some("AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H".to_string()),
+    //     severity: Some(
+    //         "Средний уровень опасности (базовая оценка CVSS 2.0 составляет 4,6)\nСредний уровень опасности (базовая оценка CVSS 3.0 составляет 5,5)".to_string()
+    //     ),
+    //     possible_fix: Some(
+    //         "Использование рекомендаций:\nhttps://kernel.org/pub/linux/kernel/v5.x/ChangeLog-5.17.6\n\nДля РедОС: http://repo.red-soft.ru/redos/7.3c/x86_64/updates/\n\nДля ОС Astra Linux Special Edition 1.7:\nобновить пакет linux-5.15 до 5.15.0-83.astra1+ci14 или более высокой версии, используя рекомендации производителя: https://wiki.astralinux.ru/astra-linux-se17-bulletin-2023-1023SE17\n\nДля Astra Linux 1.6 «Смоленск»:\nобновить пакет linux-5.15 до 5.15.0-83.astra1+ci36 или более высокой версии, используя рекомендации производителя: https://wiki.astralinux.ru/astra-linux-se16-bulletin-20231214SE16".to_string()
+    //     ),
+    //     status_vuln: Some("Подтверждена производителем".to_string()),
+    //     exploit: Some("Существует в открытом доступе".to_string()),
+    //     fix: Some("Уязвимость устранена".to_string()),
+    //     source_sites: Some(
+    //         [
+    //             "https://www.linuxkernelcves.com/cves/CVE-2023-3439".to_string(),
+    //             "https://access.redhat.com/security/cve/CVE-2023-3439".to_string(),
+    //             "https://kernel.org/pub/linux/kernel/v5.x/ChangeLog-5.17.6".to_string(),
+    //             "http://www.openwall.com/lists/oss-security/2023/07/02/1 ".to_string(),
+    //             "https://bugzilla.redhat.com/show_bug.cgi?id=2217915".to_string(),
+    //             "http://repo.red-soft.ru/redos/7.3c/x86_64/updates/".to_string(),
+    //             "https://wiki.astralinux.ru/astra-linux-se17-bulletin-2023-1023SE17".to_string(),
+    //             "https://wiki.astralinux.ru/astra-linux-se16-bulletin-20231214SE16".to_string(),
+    //         ].to_vec()
+    //     ),
+    //     id_another_system: Some(["CVE-2023-3439".to_string()].to_vec()),
+    //     info: Some("".to_string()),
+    //     conn_is: Some(0),
+    //     cwe: CWE {
+    //         info: Some(
+    //             [
+    //                 "Одновременное выполнение с использованием общего ресурса с неправильной синхронизацией («Ситуация гонки»)".to_string(),
+    //                 "Использование после освобождения".to_string(),
+    //             ].to_vec()
+    //         ),
+    //         id: Some(["CWE-362".to_string(), "CWE-416".to_string()].to_vec()),
+    //     },
+    // };
     let re = Regex::new(
         r"^(?<major_full>[[:digit:]]+)\.(?<minor_full>[[:digit:]]+)\.(?<patch_full>[[:digit:]]+)|^(?<major_sep>[[:digit:]]+)\.(?<minor_sep>[[:digit:]]+)|^(?<major_only>[[:digit:]]+)"
     ).unwrap();
@@ -321,12 +318,14 @@ pub fn connect_create(components: &Vec<Component>) {
                                         let mut ret = 0_i32;
                                         if let Some(from) = &version.from {
                                             let names = ["major_full", "major_sep", "major_only"];
-                                            let Some(caps) = re.captures(&from) else {
-                                                continue;
-                                            };
-                                            for name in names {
-                                                if let Some(c) = caps.name(name) {
-                                                    ret = c.as_str().parse::<i32>().unwrap();
+                                            if let Some(caps) = re.captures(&from) {
+                                                for name in names {
+                                                    if let Some(c) = caps.name(name) {
+                                                        let nop = c.as_str().parse::<i32>();
+                                                        if !nop.is_err() {
+                                                            ret = nop.unwrap();
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -336,12 +335,14 @@ pub fn connect_create(components: &Vec<Component>) {
                                         let mut ret = 0_i32;
                                         if let Some(from) = &version.from {
                                             let names = ["minor_full", "minor_sep"];
-                                            let Some(caps) = re.captures(&from) else {
-                                                continue;
-                                            };
-                                            for name in names {
-                                                if let Some(c) = caps.name(name) {
-                                                    ret = c.as_str().parse::<i32>().unwrap();
+                                            if let Some(caps) = re.captures(&from) {
+                                                for name in names {
+                                                    if let Some(c) = caps.name(name) {
+                                                        let nop = c.as_str().parse::<i32>();
+                                                        if !nop.is_err() {
+                                                            ret = nop.unwrap();
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -351,12 +352,14 @@ pub fn connect_create(components: &Vec<Component>) {
                                         let mut ret = 0_i32;
                                         if let Some(from) = &version.from {
                                             let names = ["patch_full"];
-                                            let Some(caps) = re.captures(&from) else {
-                                                continue;
-                                            };
-                                            for name in names {
-                                                if let Some(c) = caps.name(name) {
-                                                    ret = c.as_str().parse::<i32>().unwrap();
+                                            if let Some(caps) = re.captures(&from) {
+                                                for name in names {
+                                                    if let Some(c) = caps.name(name) {
+                                                        let nop = c.as_str().parse::<i32>();
+                                                        if !nop.is_err() {
+                                                            ret = nop.unwrap();
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -366,12 +369,14 @@ pub fn connect_create(components: &Vec<Component>) {
                                         let mut ret = 0_i32;
                                         if let Some(to) = &version.to {
                                             let names = ["major_full", "major_sep", "major_only"];
-                                            let Some(caps) = re.captures(&to) else {
-                                                continue;
-                                            };
-                                            for name in names {
-                                                if let Some(c) = caps.name(name) {
-                                                    ret = c.as_str().parse::<i32>().unwrap();
+                                            if let Some(caps) = re.captures(&to) {
+                                                for name in names {
+                                                    if let Some(c) = caps.name(name) {
+                                                        let nop = c.as_str().parse::<i32>();
+                                                        if !nop.is_err() {
+                                                            ret = nop.unwrap();
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -381,12 +386,14 @@ pub fn connect_create(components: &Vec<Component>) {
                                         let mut ret = 0_i32;
                                         if let Some(to) = &version.to {
                                             let names = ["minor_full", "minor_sep"];
-                                            let Some(caps) = re.captures(&to) else {
-                                                continue;
-                                            };
-                                            for name in names {
-                                                if let Some(c) = caps.name(name) {
-                                                    ret = c.as_str().parse::<i32>().unwrap();
+                                            if let Some(caps) = re.captures(&to) {
+                                                for name in names {
+                                                    if let Some(c) = caps.name(name) {
+                                                        let nop = c.as_str().parse::<i32>();
+                                                        if !nop.is_err() {
+                                                            ret = nop.unwrap();
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -396,12 +403,14 @@ pub fn connect_create(components: &Vec<Component>) {
                                         let mut ret = 0_i32;
                                         if let Some(to) = &version.to {
                                             let names = ["patch_full"];
-                                            let Some(caps) = re.captures(&to) else {
-                                                continue;
-                                            };
-                                            for name in names {
-                                                if let Some(c) = caps.name(name) {
-                                                    ret = c.as_str().parse::<i32>().unwrap();
+                                            if let Some(caps) = re.captures(&to) {
+                                                for name in names {
+                                                    if let Some(c) = caps.name(name) {
+                                                        let nop = c.as_str().parse::<i32>();
+                                                        if !nop.is_err() {
+                                                            ret = nop.unwrap();
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -505,5 +514,52 @@ pub fn connect_create(components: &Vec<Component>) {
         .expect("Error query") {
         let id: &str = row.get(0);
         println!("found person: {}", id);
+    }
+}
+
+#[allow(dead_code)]
+pub fn find_bug_bd(sbom: &sbom4::Root) {
+    let mut client = Client::connect("postgresql://bdu:bdu@localhost:5433/bdu", NoTls).expect(
+        "Error connection!"
+    );
+    let query =
+        "SELECT public.\"BDU\".id, public.\"BDU\".name FROM public.\"BDU\" INNER JOIN public.components ON public.\"BDU\".id = components.\"id_bdu\" WHERE public.components.name = $1;";
+
+    if let Some(sbom_components) = &sbom.components {
+        for component in sbom_components {
+            for row in client.query(query, &[&component.name]).expect("pizdec") {
+                let id: &str = row.get(0);
+                let name: &str = row.get(1);
+                println!("Name: {} BDU id: {}, BDU name: {}", &component.name, id, name);
+            }
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub fn find_bug_bd_one_query(sbom: &sbom4::Root) {
+    let mut client = Client::connect("postgresql://bdu:bdu@localhost:5433/bdu", NoTls).expect(
+        "Error connection!"
+    );
+    let mut query = String::from(
+        "SELECT public.\"BDU\".id, public.\"BDU\".name, public.components.name FROM public.\"BDU\" INNER JOIN public.components ON public.\"BDU\".id = components.\"id_bdu\" WHERE"
+    );
+
+    if let Some(sbom_components) = &sbom.components {
+        if sbom_components.len() > 0 {
+            let mut or = "";
+            for component in sbom_components {
+                query.push_str(&format!(" {} public.components.name = '{}'", or, component.name));
+                or = "OR"; // =) Debil'
+            }
+            query.push_str(";");
+            //print!("{}", &query);
+            for row in client.query(&query, &[]).expect("pizdec") {
+                let id: &str = row.get(0);
+                let name: &str = row.get(1);
+                let name_: &str = row.get(2);
+                println!("Name: {} BDU id: {}, BDU name: {}", name_, id, name);
+            }
+        }
     }
 }

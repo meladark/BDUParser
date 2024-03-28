@@ -348,6 +348,7 @@ pub struct Affect {
     //TODO: ADD Versions
 }
 
+#[allow(dead_code)]
 pub fn read_sbom(pt: String)-> Root {
     let file_sbom = fs::read_to_string(Path::new(&pt)).expect("Bad File");
     let sbom = serde_json::from_str::<Root>(&file_sbom).expect("Bad json");

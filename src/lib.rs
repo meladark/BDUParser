@@ -2,6 +2,7 @@ use calamine::{ open_workbook, Reader, Xlsx };
 use serde::{ Deserialize, Serialize };
 use serde_json::{ Result, Value };
 use std::{ fs, path::Path };
+use std::time::{ Duration, Instant };
 
 mod bdu;
 mod sbom4;
@@ -75,7 +76,9 @@ fn sbom_read(pt: String) -> Result<()> {
 mod tests {
     use std::{ fs::File, io::{ BufWriter, Write } };
 
-    use self::{ bd::connect_create, bdu::{ find_bugs, xlsx_parser } };
+    use crate::bd::find_bug_bd_one_query;
+
+    use self::{ bd::{ connect_create, find_bug_bd }, bdu::{ find_bugs, xlsx_parser } };
 
     use super::*;
 
@@ -117,7 +120,10 @@ mod tests {
         );
         let sbom = sbom4::read_sbom(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
         if let Some(bdu4ka) = bdu_components {
-            find_bugs(&bdu4ka, &sbom)
+            let start = Instant::now();
+            find_bugs(&bdu4ka, &sbom);
+            let duration = start.elapsed();
+            println!("Time elapsed in find_bugs() is: {:?}", duration);
         }
     }
     #[test]
@@ -130,5 +136,21 @@ mod tests {
             connect_create(&ebu4ka);
         }
         //connect_create();
+    }
+    #[test]
+    fn test_find_bug_bd() {
+        let sbom = sbom4::read_sbom(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
+        let start = Instant::now();
+        find_bug_bd(&sbom);
+        let duration = start.elapsed();
+        println!("Time elapsed in find_bug_bd() is: {:?}", duration);
+    }
+    #[test]
+    fn test_find_bug_bd_one_query(){
+        let sbom = sbom4::read_sbom(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
+        let start = Instant::now();
+        find_bug_bd_one_query(&sbom);
+        let duration = start.elapsed();
+        println!("Time elapsed in find_bug_bd_one_query() is: {:?}", duration);
     }
 }
