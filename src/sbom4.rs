@@ -1,6 +1,6 @@
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
-use std::{fs, path::Path};
+use std::{ fs, path::Path };
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -306,7 +306,7 @@ pub struct Rating {
     pub source: Option<Source>,
     pub score: Option<i32>,
     pub severity: Option<String>, //TODO: add enum
-    pub method: Option<String>,   //TODO: add enum
+    pub method: Option<String>, //TODO: add enum
     pub vector: Option<String>,
     pub justificatiom: Option<String>,
 }
@@ -335,9 +335,9 @@ pub struct Organization {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Analysis {
-    pub state: Option<String>,         //TODO: Add enum
+    pub state: Option<String>, //TODO: Add enum
     pub justification: Option<String>, //TODO: Add enum
-    pub response: Option<String>,      //TODO: Add enum
+    pub response: Option<String>, //TODO: Add enum
     pub detail: Option<String>,
 }
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -349,7 +349,7 @@ pub struct Affect {
 }
 
 #[allow(dead_code)]
-pub fn read_sbom(pt: String)-> Root {
+pub fn read_sbom(pt: String) -> Root {
     let file_sbom = fs::read_to_string(Path::new(&pt)).expect("Bad File");
     let sbom = serde_json::from_str::<Root>(&file_sbom).expect("Bad json");
     sbom

@@ -2,7 +2,6 @@ use calamine::{ open_workbook, Reader, Xlsx };
 use serde::{ Deserialize, Serialize };
 use serde_json::{ Result, Value };
 use std::{ fs, path::Path };
-use std::time::{ Duration, Instant };
 
 mod bdu;
 mod sbom4;
@@ -74,7 +73,7 @@ fn sbom_read(pt: String) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::{ fs::File, io::{ BufWriter, Write } };
+    use std::{ fs::File, io::{ BufWriter, Write }, time::Instant };
 
     use crate::bd::find_bug_bd_one_query;
 
@@ -146,7 +145,7 @@ mod tests {
         println!("Time elapsed in find_bug_bd() is: {:?}", duration);
     }
     #[test]
-    fn test_find_bug_bd_one_query(){
+    fn test_find_bug_bd_one_query() {
         let sbom = sbom4::read_sbom(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
         let start = Instant::now();
         find_bug_bd_one_query(&sbom);
