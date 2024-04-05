@@ -3,10 +3,10 @@ use serde::{ Deserialize, Serialize };
 use serde_json::{ Result, Value };
 use std::{ fs, path::Path };
 
+mod bd;
 mod bdu;
 mod sbom4;
 mod sbom5;
-mod bd;
 
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize, Debug)]
@@ -63,7 +63,12 @@ fn sbom_read(pt: String) -> Result<()> {
             println!("Parse Done");
         } else if field == "1.5" {
             println!("Run parse 1.5");
-            let _ = serde_json::from_str::<sbom5::Root>(&foo)?;
+            let sbom = serde_json::from_str::<sbom5::Root>(&foo).expect("Bad json");
+            if let Some(components) = sbom.components {
+                for component in components {
+                    print!("{}|", component.name);
+                }
+            }
             println!("Parse Done");
         }
     }
@@ -88,18 +93,19 @@ mod tests {
     }
     #[test]
     fn test_read_bdu() {
-        read_bdu(String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"), String::from("Sheet"));
+        read_bdu(String::from("extra/vullist.xlsx"), String::from("Sheet"));
     }
     #[test]
     fn test_read_json() {
-        let _ = sbom_read(String::from("/home/mike/EXTERNAL/bdu/bom.json"));
-        let _ = sbom_read(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
-        let _ = sbom_read(String::from("/home/mike/EXTERNAL/bdu/bom (1).json"));
+        let _ = sbom_read(String::from("extra/bom.json"));
+        let _ = sbom_read(String::from("extra/bom.1.4.json"));
+        let _ = sbom_read(String::from("extra/bom (1).json"));
+        let _ = sbom_read(String::from("extra/bom.1.5.json"));
     }
     #[test]
     fn test_bdu_parser() {
         let bdu_components = xlsx_parser(
-            &String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
+            &String::from("extra/vullist.xlsx"),
             &String::from("Sheet")
         );
         if let Some(components) = bdu_components {
@@ -114,10 +120,10 @@ mod tests {
     #[test]
     fn test_find_bugs() {
         let bdu_components = xlsx_parser(
-            &String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
+            &String::from("extra/vullist.xlsx"),
             &String::from("Sheet")
         );
-        let sbom = sbom4::read_sbom(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
+        let sbom = sbom4::read_sbom(String::from("extra/bom.1.4.json"));
         if let Some(bdu4ka) = bdu_components {
             let start = Instant::now();
             find_bugs(&bdu4ka, &sbom);
@@ -128,7 +134,7 @@ mod tests {
     #[test]
     fn test_postgres() {
         let bdu_components = xlsx_parser(
-            &String::from("/home/mike/EXTERNAL/bdu/vullist.xlsx"),
+            &String::from("extra/vullist.xlsx"),
             &String::from("Sheet")
         );
         if let Some(ebu4ka) = bdu_components {
@@ -138,7 +144,7 @@ mod tests {
     }
     #[test]
     fn test_find_bug_bd() {
-        let sbom = sbom4::read_sbom(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
+        let sbom = sbom4::read_sbom(String::from("extra/bom.1.4.json"));
         let start = Instant::now();
         find_bug_bd(&sbom);
         let duration = start.elapsed();
@@ -146,7 +152,7 @@ mod tests {
     }
     #[test]
     fn test_find_bug_bd_one_query() {
-        let sbom = sbom4::read_sbom(String::from("/home/mike/EXTERNAL/bdu/bom.1.4.json"));
+        let sbom = sbom4::read_sbom(String::from("extra/bom.1.4.json"));
         let start = Instant::now();
         find_bug_bd_one_query(&sbom);
         let duration = start.elapsed();
