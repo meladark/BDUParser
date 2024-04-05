@@ -1,5 +1,7 @@
 # Парсер [БДУ] и анализа [SBOM]
 
+[![Rust](https://github.com/meladark/BDUParser/actions/workflows/rust.yml/badge.svg)](https://github.com/meladark/BDUParser/actions/workflows/rust.yml)
+
 Парсер, который для анализа использует xlsx [БДУ] и Cyclone DX [SBOM] для анализа уязвимостей.
 
 ## TODO list
