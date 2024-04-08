@@ -1,6 +1,5 @@
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
-use std::{ fs, path::Path };
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -346,11 +345,4 @@ pub struct Affect {
     #[serde(rename = "ref")]
     pub ref_field: String,
     //TODO: ADD Versions
-}
-
-#[allow(dead_code)]
-pub fn read_sbom(pt: String) -> Root {
-    let file_sbom = fs::read_to_string(Path::new(&pt)).expect("Bad File");
-    let sbom = serde_json::from_str::<Root>(&file_sbom).expect("Bad json");
-    sbom
 }

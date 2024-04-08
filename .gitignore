@@ -4,3 +4,4 @@ bdu.json
 Cargo.lock
 postgres_data
 .vscode
+cyclonedx-*

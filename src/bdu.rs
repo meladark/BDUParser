@@ -6,8 +6,6 @@ use regex::Regex;
 
 use calamine::{ open_workbook, Reader, Xlsx };
 
-use crate::sbom4;
-
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Элемент компонет с уязвимостью
@@ -395,28 +393,5 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
         Some(bdu_components)
     } else {
         None
-    }
-}
-
-#[allow(dead_code)]
-pub fn find_bugs(bdu_components: &Vec<Component>, sbom: &sbom4::Root) {
-    if let Some(components_sbom) = &sbom.components {
-        for component in components_sbom {
-            for component_bdu in bdu_components {
-                let mut find = false;
-                for name_bdu in &component_bdu.name {
-                    for name in name_bdu {
-                        if name == &component.name {
-                            print!("Нашлося: {}\n", name);
-                            find = true;
-                            continue;
-                        }
-                    }
-                }
-                if find {
-                    print!("{}\n", &component_bdu.id);
-                }
-            }
-        }
     }
 }

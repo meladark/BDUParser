@@ -1,108 +1,131 @@
+use std::{ clone, default };
+
 // extern crate postgres;
 // use include_postgres_sql::{include_sql, impl_sql};
+use crate::{ bdu::Component, sbom5 };
 use postgres::{ Client, NoTls };
 use regex::Regex;
-use crate::{ bdu::Component, sbom4 };
 
-// include_sql!("../bdu_sql/same.sql");
+pub struct BD {
+    client: String,
+}
 
-// postgresql://bdu:bdu@localhost:5433/bdu user=bdu password=bdu dbname=bdu host=localhost port=64111 connect_timeout=10 keepalives=0 components: &Vec<Component>
+impl BD {
+    pub fn new(postgres_url: &String) -> Self {
+        Self {
+            client: postgres_url.to_string(),
+        }
+    }
+    pub fn update(&self, components: &Vec<Component>) -> Result<(), String> {
+        return connect(&self.client, components);
+    }
+    pub fn find(&self, sbom: &sbom5::Root) {
+        find_bug_bd_one_query(&self.client, sbom);
+    }
+}
+
+impl Default for BD {
+    fn default() -> Self {
+        Self {
+            client: "postgresql://bdu:bdu@localhost:5433/bdu".to_string(),
+        }
+    }
+}
+
 #[allow(dead_code)]
-pub fn connect_create(components: &Vec<Component>) {
-    let mut client = Client::connect("postgresql://bdu:bdu@localhost:5433/bdu", NoTls).expect(
-        "Error connection!"
-    );
-
+/// Пример ``
+fn connect(host: &String, components: &Vec<Component>) -> Result<(), String> {
+    let mut client = Client::connect(host, NoTls).expect("Error connect");
     client
         .batch_execute(
             "
-    BEGIN;
-    CREATE TABLE IF NOT EXISTS public.\"BDU_platform\"
-    (
-        id serial,
-        bdu_id text,
-        platform integer,
-        PRIMARY KEY (id)
-    );
+        BEGIN;
+        CREATE TABLE IF NOT EXISTS public.\"BDU_platform\"
+        (
+            id serial,
+            bdu_id text,
+            platform integer,
+            PRIMARY KEY (id)
+        );
 
-    CREATE TABLE IF NOT EXISTS public.platform
-    (
-        name text COLLATE pg_catalog.\"default\",
-        version text COLLATE pg_catalog.\"default\",
-        pkey serial,
-        CONSTRAINT platform_pkey PRIMARY KEY (pkey)
-    );
+        CREATE TABLE IF NOT EXISTS public.platform
+        (
+            name text COLLATE pg_catalog.\"default\",
+            version text COLLATE pg_catalog.\"default\",
+            pkey serial,
+            CONSTRAINT platform_pkey PRIMARY KEY (pkey)
+        );
 
-    CREATE TABLE IF NOT EXISTS public.\"BDU\"
-    (
-        id text COLLATE pg_catalog.\"default\" NOT NULL,
-        name text COLLATE pg_catalog.\"default\",
-        \"desc\" text COLLATE pg_catalog.\"default\",
-        vendors text[] COLLATE pg_catalog.\"default\",
-        software_types text[] COLLATE pg_catalog.\"default\",
-        class text COLLATE pg_catalog.\"default\",
-        date text COLLATE pg_catalog.\"default\",
-        cvss2 text COLLATE pg_catalog.\"default\",
-        cvss3 text COLLATE pg_catalog.\"default\",
-        severity text COLLATE pg_catalog.\"default\",
-        possible_fix text COLLATE pg_catalog.\"default\",
-        status text COLLATE pg_catalog.\"default\",
-        exploit text COLLATE pg_catalog.\"default\",
-        fix text COLLATE pg_catalog.\"default\",
-        source_sites text[] COLLATE pg_catalog.\"default\",
-        id_another_system text[] COLLATE pg_catalog.\"default\",
-        info text COLLATE pg_catalog.\"default\",
-        conn_is integer,
-        \"CWE_info\" text[] COLLATE pg_catalog.\"default\",
-        \"CWE_id\" text[] COLLATE pg_catalog.\"default\",
-        CONSTRAINT \"BDU_pkey\" PRIMARY KEY (id)
-    );
+        CREATE TABLE IF NOT EXISTS public.\"BDU\"
+        (
+            id text COLLATE pg_catalog.\"default\" NOT NULL,
+            name text COLLATE pg_catalog.\"default\",
+            \"desc\" text COLLATE pg_catalog.\"default\",
+            vendors text[] COLLATE pg_catalog.\"default\",
+            software_types text[] COLLATE pg_catalog.\"default\",
+            class text COLLATE pg_catalog.\"default\",
+            date text COLLATE pg_catalog.\"default\",
+            cvss2 text COLLATE pg_catalog.\"default\",
+            cvss3 text COLLATE pg_catalog.\"default\",
+            severity text COLLATE pg_catalog.\"default\",
+            possible_fix text COLLATE pg_catalog.\"default\",
+            status text COLLATE pg_catalog.\"default\",
+            exploit text COLLATE pg_catalog.\"default\",
+            fix text COLLATE pg_catalog.\"default\",
+            source_sites text[] COLLATE pg_catalog.\"default\",
+            id_another_system text[] COLLATE pg_catalog.\"default\",
+            info text COLLATE pg_catalog.\"default\",
+            conn_is integer,
+            \"CWE_info\" text[] COLLATE pg_catalog.\"default\",
+            \"CWE_id\" text[] COLLATE pg_catalog.\"default\",
+            CONSTRAINT \"BDU_pkey\" PRIMARY KEY (id)
+        );
 
-    COMMENT ON TABLE public.\"BDU\"
-        IS 'Уязвимости спаршенные с бду. ';
+        COMMENT ON TABLE public.\"BDU\"
+            IS 'Уязвимости спаршенные с бду. ';
 
-    CREATE TABLE IF NOT EXISTS public.components
-    (
-        id serial,
-        name text COLLATE pg_catalog.\"default\",
-        \"from\" text COLLATE pg_catalog.\"default\",
-        \"to\" text COLLATE pg_catalog.\"default\",
-        \"only\" text COLLATE pg_catalog.\"default\",
-        inclusive boolean,
-        from_major integer,
-        from_minor integer,
-        from_patch integer,
-        to_major integer,
-        to_minor integer,
-        to_patch integer,
-        id_bdu text COLLATE pg_catalog.\"default\",
-        CONSTRAINT components_pkey PRIMARY KEY (id)
-    );
+        CREATE TABLE IF NOT EXISTS public.components
+        (
+            id serial,
+            name text COLLATE pg_catalog.\"default\",
+            \"from\" text COLLATE pg_catalog.\"default\",
+            \"to\" text COLLATE pg_catalog.\"default\",
+            \"only\" text COLLATE pg_catalog.\"default\",
+            inclusive boolean,
+            from_major integer,
+            from_minor integer,
+            from_patch integer,
+            to_major integer,
+            to_minor integer,
+            to_patch integer,
+            id_bdu text COLLATE pg_catalog.\"default\",
+            CONSTRAINT components_pkey PRIMARY KEY (id)
+        );
 
-    ALTER TABLE IF EXISTS public.\"BDU_platform\"
-        ADD FOREIGN KEY (platform)
-        REFERENCES public.platform (pkey) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
-        NOT VALID;
-
-
-    ALTER TABLE IF EXISTS public.\"BDU_platform\"
-        ADD FOREIGN KEY (bdu_id)
-        REFERENCES public.\"BDU\" (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
-        NOT VALID;
+        ALTER TABLE IF EXISTS public.\"BDU_platform\"
+            ADD FOREIGN KEY (platform)
+            REFERENCES public.platform (pkey) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+            NOT VALID;
 
 
-    ALTER TABLE IF EXISTS public.components
-        ADD FOREIGN KEY (id_bdu)
-        REFERENCES public.\"BDU\" (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
-        NOT VALID;
+        ALTER TABLE IF EXISTS public.\"BDU_platform\"
+            ADD FOREIGN KEY (bdu_id)
+            REFERENCES public.\"BDU\" (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+            NOT VALID;
 
-    END;"
+
+        ALTER TABLE IF EXISTS public.components
+            ADD FOREIGN KEY (id_bdu)
+            REFERENCES public.\"BDU\" (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE NO ACTION
+            NOT VALID;
+
+        END;"
         )
         .expect("Error batch_execute");
 
@@ -506,41 +529,12 @@ pub fn connect_create(components: &Vec<Component>) {
             }
         }
     }
-    for row in client
-        .query(
-            "SELECT public.\"BDU\".id FROM public.\"BDU\" INNER JOIN public.components ON public.\"BDU\".id = components.\"id_bdu\" WHERE public.components.name = 'Bluetooth Core Specification';",
-            &[]
-        )
-        .expect("Error query") {
-        let id: &str = row.get(0);
-        println!("found person: {}", id);
-    }
+    Ok(())
 }
 
 #[allow(dead_code)]
-pub fn find_bug_bd(sbom: &sbom4::Root) {
-    let mut client = Client::connect("postgresql://bdu:bdu@localhost:5433/bdu", NoTls).expect(
-        "Error connection!"
-    );
-    let query =
-        "SELECT public.\"BDU\".id, public.\"BDU\".name FROM public.\"BDU\" INNER JOIN public.components ON public.\"BDU\".id = components.\"id_bdu\" WHERE public.components.name = $1;";
-
-    if let Some(sbom_components) = &sbom.components {
-        for component in sbom_components {
-            for row in client.query(query, &[&component.name]).expect("pizdec") {
-                let id: &str = row.get(0);
-                let name: &str = row.get(1);
-                println!("Name: {} BDU id: {}, BDU name: {}", &component.name, id, name);
-            }
-        }
-    }
-}
-
-#[allow(dead_code)]
-pub fn find_bug_bd_one_query(sbom: &sbom4::Root) {
-    let mut client = Client::connect("postgresql://bdu:bdu@localhost:5433/bdu", NoTls).expect(
-        "Error connection!"
-    );
+fn find_bug_bd_one_query(host: &String, sbom: &sbom5::Root) {
+    let mut client = Client::connect(host, NoTls).expect("Error connect");
     let mut query = String::from(
         "SELECT public.\"BDU\".id, public.\"BDU\".name, public.components.name FROM public.\"BDU\" INNER JOIN public.components ON public.\"BDU\".id = components.\"id_bdu\" WHERE"
     );
@@ -553,7 +547,6 @@ pub fn find_bug_bd_one_query(sbom: &sbom4::Root) {
                 or = "OR"; // =) Debil'
             }
             query.push_str(";");
-            //print!("{}", &query);
             for row in client.query(&query, &[]).expect("pizdec") {
                 let id: &str = row.get(0);
                 let name: &str = row.get(1);
