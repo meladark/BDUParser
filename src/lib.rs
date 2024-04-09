@@ -25,6 +25,7 @@ fn sbom_read(foo: String) -> Result<sbom5::Root, String> {
     if let Some(field) = t.get("specVersion") {
         if field == "1.5" {
             let sbom = serde_json::from_str::<sbom5::Root>(&foo).expect("Bad json");
+
             Ok(sbom)
         } else {
             Err(format!("Bad specVersion file. Must be 1.5 at least: {}", field))
@@ -106,26 +107,22 @@ mod tests {
     }
     #[test]
     fn test_postgres() {
-        let bdu_components = xlsx_parser(
-            &String::from("extra/vullist.xlsx"),
-            &String::from("Sheet")
-        );
-        if let Some(ebu4ka) = bdu_components {
-            let _ = BD::default().update(&ebu4ka);
-        }
-        //connect_create();
+        let _ = BD::default().update();
     }
     #[test]
     fn test_find_bug_bd_one_query() {
-        let sbom = sbom_read(
-            String::from(fs::read_to_string(Path::new("extra/bom.1.5.json")).expect("Bad File"))
-        );
         let start = Instant::now();
-        match sbom {
-            Ok(sbom) => BD::default().find(&sbom),
+        let kek = BD::default().find(
+            &String::from(fs::read_to_string(Path::new("extra/bom.1.5.json")).expect("Bad File"))
+        );
+        let duration = start.elapsed();
+        match kek {
+            Ok(k) =>
+                for i in k {
+                    println!("{} {}", i.component.name, i.vuln.id);
+                }
             Err(err) => println!("Error: {}", err),
         }
-        let duration = start.elapsed();
         println!("Time elapsed in find_bug_bd_one_query() is: {:?}", duration);
     }
 }

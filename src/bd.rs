@@ -1,26 +1,154 @@
-use std::{ clone, default };
+use std::{ fs, process::Command };
 
-// extern crate postgres;
-// use include_postgres_sql::{include_sql, impl_sql};
-use crate::{ bdu::Component, sbom5 };
-use postgres::{ Client, NoTls };
+// #![crate_name = "doc"]
+use crate::{ bdu::{ self, xlsx_parser, Component }, sbom5 };
+use postgres::{ types::Json, Client, NoTls };
 use regex::Regex;
+use serde_json::json;
+
+pub struct Bugs {
+    pub component: sbom5::Component,
+    pub vuln: bdu::Component,
+}
 
 pub struct BD {
+    ///
     client: String,
 }
 
 impl BD {
+    #[allow(dead_code)]
+    /// Создание нового подключения.
+    /// Подключение происходит при каждом вызове методов.
+    /// Тут лишь сохраняются параметры.
+    ///
+    /// # Arguments
+    ///
+    /// * `postgres_url` - Параметры подключения к Постгрес.
+    ///
+    /// # Example
+    ///
+    /// Пример для урла - *postgresql://bdu:bdu@localhost:5433/bdu*
     pub fn new(postgres_url: &String) -> Self {
         Self {
             client: postgres_url.to_string(),
         }
     }
-    pub fn update(&self, components: &Vec<Component>) -> Result<(), String> {
-        return connect(&self.client, components);
+    #[allow(dead_code)]
+    pub fn update(&self) -> Result<(), String> {
+        let output = if cfg!(target_os = "windows") {
+            Command::new("cmd")
+                .args(["/C", "Windows doesn`t support yet"])
+                .output()
+                .expect("failed to execute process");
+            return Err("Windows platform doesn`t support yet".to_string());
+        } else {
+            Command::new("wget")
+                .arg("--no-check-certificate")
+                .arg("https://bdu.fstec.ru/files/documents/vullist.xlsx")
+                .arg("-O")
+                .arg("vull.xlsx")
+                .output()
+                .expect("failed to execute process")
+        };
+        if output.status.success() {
+            let bdu_components = xlsx_parser(&String::from("vull.xlsx"), &String::from("Sheet"));
+            fs::remove_file("vull.xlsx").expect("Error delete vull.xlsx");
+            if let Some(components) = bdu_components {
+                return connect(&self.client, &components);
+            } else {
+                return Err("Faild to parse xlsx BDU".to_string());
+            }
+        } else {
+            return Err(
+                format!(
+                    "Get BDU database error: Message: {} Status: {}",
+                    String::from_utf8(output.stdout).expect("pizdec conver"),
+                    output.status
+                )
+            );
+        }
     }
-    pub fn find(&self, sbom: &sbom5::Root) {
-        find_bug_bd_one_query(&self.client, sbom);
+    #[allow(dead_code)]
+    pub fn find(&self, foo: &String) -> Result<Vec<Bugs>, String> {
+        let sbom = serde_json::from_str::<sbom5::Root>(foo).expect("Bad json");
+        let mut client = Client::connect(&self.client, NoTls).expect("Error connect");
+        let ans = client
+            .query(
+                "
+            INSERT INTO public.\"SBOM_raw\" (sbom) VALUES ($1) RETURNING id;
+            ",
+                &[&json!(&foo)]
+            )
+            .expect("Error insert");
+        let mut _id = ans[0].get::<_, i32>(0);
+        let mut count = 0;
+        if let Some(sbom_component) = &sbom.components {
+            let re = Regex::new(r"(?<major>\d+).(?<minor>\d+).(?<patch>\d+)").expect("Error regex");
+            for component in sbom_component {
+                let row = client.execute(
+                    "INSERT INTO public.sbom_components (name, version, major, minor, patch, \"SBOM_raw\", \"raw\") VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    &[
+                        &component.name,
+                        &Some(&component.version),
+                        {
+                            let mut ret = 0_i32;
+                            if let Some(ver) = &component.version {
+                                if let Some(caps) = re.captures(&ver) {
+                                    if let Some(c) = caps.name("major") {
+                                        let nop = c.as_str().parse::<i32>();
+                                        if !nop.is_err() {
+                                            ret = nop.unwrap();
+                                        }
+                                    }
+                                }
+                            }
+                            &Some(ret)
+                        },
+                        {
+                            let mut ret = 0_i32;
+                            if let Some(ver) = &component.version {
+                                if let Some(caps) = re.captures(&ver) {
+                                    if let Some(c) = caps.name("minor") {
+                                        let nop = c.as_str().parse::<i32>();
+                                        if !nop.is_err() {
+                                            ret = nop.unwrap();
+                                        }
+                                    }
+                                }
+                            }
+                            &Some(ret)
+                        },
+                        {
+                            let mut ret = 0_i32;
+                            if let Some(ver) = &component.version {
+                                if let Some(caps) = re.captures(&ver) {
+                                    if let Some(c) = caps.name("patch") {
+                                        let nop = c.as_str().parse::<i32>();
+                                        if !nop.is_err() {
+                                            ret = nop.unwrap();
+                                        }
+                                    }
+                                }
+                            }
+                            &Some(ret)
+                        },
+                        &_id,
+                        &json!(&component),
+                    ]
+                );
+                match row {
+                    Ok(_) => {
+                        count += 1;
+                    }
+                    Err(err) => println!("[Error] Error add sbom component to postgres: {}", err),
+                }
+            }
+            println!("[Info] Add {}/{} sbom components.", count, sbom_component.len());
+        } else {
+            return Err("No one sbom components".to_string());
+        }
+        find_bug_bd_one_query(&self.client, _id)
     }
 }
 
@@ -33,7 +161,6 @@ impl Default for BD {
 }
 
 #[allow(dead_code)]
-/// Пример ``
 fn connect(host: &String, components: &Vec<Component>) -> Result<(), String> {
     let mut client = Client::connect(host, NoTls).expect("Error connect");
     client
@@ -78,6 +205,7 @@ fn connect(host: &String, components: &Vec<Component>) -> Result<(), String> {
             conn_is integer,
             \"CWE_info\" text[] COLLATE pg_catalog.\"default\",
             \"CWE_id\" text[] COLLATE pg_catalog.\"default\",
+            \"raw\" json,
             CONSTRAINT \"BDU_pkey\" PRIMARY KEY (id)
         );
 
@@ -128,127 +256,40 @@ fn connect(host: &String, components: &Vec<Component>) -> Result<(), String> {
         END;"
         )
         .expect("Error batch_execute");
-
-    // let name = "Ferris";
-    // let data = None::<&[u8]>;
-    // client.execute(
-    //     "INSERT INTO person (name, data) VALUES ($1, $2)",
-    //     &[&name, &data],
-    // ).expect("Error execute");
-    // let component = Component {
-    //     id: "BDU:2023-03670".to_string(),
-    //     name_vuln: Some(
-    //         "Уязвимость реализации протокола Bluetooth Classic спецификации Bluetooth Core Specification, позволяющая нарушителю раскрыть защищаемую информацию".to_string()
-    //     ),
-    //     desc_vuln: Some(
-    //         "Уязвимость функции mctp_unregister() ядра операционных систем Linux связана с использованием памяти после ее освобождения при обработке объекта mdev->addrs. Эксплуатация уязвимости может позволить нарушителю вызвать отказ в обслуживании".to_string()
-    //     ),
-    //     vendors: Some(
-    //         [
-    //             "ООО «РусБИТех-Астра»".to_string(),
-    //             "ООО «Ред Софт»".to_string(),
-    //             "Сообщество свободного программного обеспечения".to_string(),
-    //         ].to_vec()
-    //     ),
-    //     name: Some(
-    //         [
-    //             "Astra Linux Special Edition (запись в едином реестре российских программ №369)".to_string(),
-    //             "РЕД ОС (запись в едином реестре российских программ №3751)".to_string(),
-    //             "Linux".to_string(),
-    //         ].to_vec()
-    //     ),
-    //     v_test: Some([].to_vec()),
-    //     versions: Some(
-    //         [
-    //             Version {
-    //                 from: Some("".to_string()),
-    //                 to: Some("".to_string()),
-    //                 only: Some("7.3".to_string()),
-    //                 inclusive: false,
-    //                 name: "РЕД ОС".to_string(),
-    //             },
-    //             Version {
-    //                 from: Some("".to_string()),
-    //                 to: Some("".to_string()),
-    //                 only: Some("1.7".to_string()),
-    //                 inclusive: false,
-    //                 name: "Astra Linux Special Edition".to_string(),
-    //             },
-    //             Version {
-    //                 from: Some("5.15".to_string()),
-    //                 to: Some("5.17.5".to_string()),
-    //                 only: Some("".to_string()),
-    //                 inclusive: true,
-    //                 name: "Linux".to_string(),
-    //             },
-    //         ].to_vec()
-    //     ),
-    //     software_types: Some(["Операционная система".to_string()].to_vec()),
-    //     v_platforms: Some([].to_vec()),
-    //     platforms: Some(
-    //         [
-    //             Platform {
-    //                 name: Some("Astra Linux Special Edition".to_string()),
-    //                 version: Some(
-    //                     "1.6 «Смоленск»; запись в едином реестре российских программ №369".to_string()
-    //                 ),
-    //             },
-    //             Platform {
-    //                 name: Some("РЕД ОС".to_string()),
-    //                 version: Some(
-    //                     "7.3; запись в едином реестре российских программ №3751".to_string()
-    //                 ),
-    //             },
-    //             Platform {
-    //                 name: Some("Astra Linux Special Edition".to_string()),
-    //                 version: Some(
-    //                     "1.7; запись в едином реестре российских программ №369".to_string()
-    //                 ),
-    //             },
-    //             Platform {
-    //                 name: Some("Linux".to_string()),
-    //                 version: Some("от 5.15 до 5.17.5 включительно".to_string()),
-    //             },
-    //         ].to_vec()
-    //     ),
-    //     class_vuln: Some("Уязвимость кода".to_string()),
-    //     date: Some("22.04.2022".to_string()),
-    //     cvss2: Some("AV:L/AC:L/Au:S/C:N/I:N/A:C".to_string()),
-    //     cvss3: Some("AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H".to_string()),
-    //     severity: Some(
-    //         "Средний уровень опасности (базовая оценка CVSS 2.0 составляет 4,6)\nСредний уровень опасности (базовая оценка CVSS 3.0 составляет 5,5)".to_string()
-    //     ),
-    //     possible_fix: Some(
-    //         "Использование рекомендаций:\nhttps://kernel.org/pub/linux/kernel/v5.x/ChangeLog-5.17.6\n\nДля РедОС: http://repo.red-soft.ru/redos/7.3c/x86_64/updates/\n\nДля ОС Astra Linux Special Edition 1.7:\nобновить пакет linux-5.15 до 5.15.0-83.astra1+ci14 или более высокой версии, используя рекомендации производителя: https://wiki.astralinux.ru/astra-linux-se17-bulletin-2023-1023SE17\n\nДля Astra Linux 1.6 «Смоленск»:\nобновить пакет linux-5.15 до 5.15.0-83.astra1+ci36 или более высокой версии, используя рекомендации производителя: https://wiki.astralinux.ru/astra-linux-se16-bulletin-20231214SE16".to_string()
-    //     ),
-    //     status_vuln: Some("Подтверждена производителем".to_string()),
-    //     exploit: Some("Существует в открытом доступе".to_string()),
-    //     fix: Some("Уязвимость устранена".to_string()),
-    //     source_sites: Some(
-    //         [
-    //             "https://www.linuxkernelcves.com/cves/CVE-2023-3439".to_string(),
-    //             "https://access.redhat.com/security/cve/CVE-2023-3439".to_string(),
-    //             "https://kernel.org/pub/linux/kernel/v5.x/ChangeLog-5.17.6".to_string(),
-    //             "http://www.openwall.com/lists/oss-security/2023/07/02/1 ".to_string(),
-    //             "https://bugzilla.redhat.com/show_bug.cgi?id=2217915".to_string(),
-    //             "http://repo.red-soft.ru/redos/7.3c/x86_64/updates/".to_string(),
-    //             "https://wiki.astralinux.ru/astra-linux-se17-bulletin-2023-1023SE17".to_string(),
-    //             "https://wiki.astralinux.ru/astra-linux-se16-bulletin-20231214SE16".to_string(),
-    //         ].to_vec()
-    //     ),
-    //     id_another_system: Some(["CVE-2023-3439".to_string()].to_vec()),
-    //     info: Some("".to_string()),
-    //     conn_is: Some(0),
-    //     cwe: CWE {
-    //         info: Some(
-    //             [
-    //                 "Одновременное выполнение с использованием общего ресурса с неправильной синхронизацией («Ситуация гонки»)".to_string(),
-    //                 "Использование после освобождения".to_string(),
-    //             ].to_vec()
-    //         ),
-    //         id: Some(["CWE-362".to_string(), "CWE-416".to_string()].to_vec()),
-    //     },
-    // };
+    client
+        .batch_execute(
+            "
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS public.\"SBOM_raw\"
+            (
+                id serial,
+                sbom json,
+                PRIMARY KEY (id)
+            );
+            
+            CREATE TABLE IF NOT EXISTS public.sbom_components
+            (
+                id serial,
+                name text,
+                version text,
+                major integer,
+                minor integer,
+                patch integer,
+                \"SBOM_raw\" integer,
+                \"raw\" json,
+                PRIMARY KEY (id)
+            );
+            
+            ALTER TABLE IF EXISTS public.sbom_components
+                ADD FOREIGN KEY (\"SBOM_raw\")
+                REFERENCES public.\"SBOM_raw\" (id) MATCH SIMPLE
+                ON UPDATE NO ACTION
+                ON DELETE NO ACTION
+                NOT VALID;
+            
+            END;"
+        )
+        .expect("Error create components database");
     let re = Regex::new(
         r"^(?<major_full>[[:digit:]]+)\.(?<minor_full>[[:digit:]]+)\.(?<patch_full>[[:digit:]]+)|^(?<major_sep>[[:digit:]]+)\.(?<minor_sep>[[:digit:]]+)|^(?<major_only>[[:digit:]]+)"
     ).unwrap();
@@ -286,8 +327,9 @@ fn connect(host: &String, components: &Vec<Component>) -> Result<(), String> {
                 info, 
                 conn_is, 
                 \"CWE_info\", 
-                \"CWE_id\") 
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)",
+                \"CWE_id\",
+                \"raw\") 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)",
                     &[
                         &component.id,
                         &component.name_vuln,
@@ -309,6 +351,7 @@ fn connect(host: &String, components: &Vec<Component>) -> Result<(), String> {
                         &component.conn_is,
                         &component.cwe.info,
                         &component.cwe.id,
+                        &json!(component),
                     ]
                 )
                 .expect("pizdec");
@@ -533,26 +576,26 @@ fn connect(host: &String, components: &Vec<Component>) -> Result<(), String> {
 }
 
 #[allow(dead_code)]
-fn find_bug_bd_one_query(host: &String, sbom: &sbom5::Root) {
+fn find_bug_bd_one_query(host: &String, id: i32) -> Result<Vec<Bugs>, String> {
     let mut client = Client::connect(host, NoTls).expect("Error connect");
-    let mut query = String::from(
-        "SELECT public.\"BDU\".id, public.\"BDU\".name, public.components.name FROM public.\"BDU\" INNER JOIN public.components ON public.\"BDU\".id = components.\"id_bdu\" WHERE"
+    let row = client.query(
+        "SELECT public.sbom_components.\"raw\", public.\"BDU\".\"raw\"
+	FROM public.sbom_components 
+	INNER JOIN public.components 
+	ON public.sbom_components.name = public.components.name INNER JOIN public.\"BDU\" ON public.components.id_bdu = public.\"BDU\".id
+	WHERE public.sbom_components.\"SBOM_raw\" = $1;",
+        &[&id]
     );
-
-    if let Some(sbom_components) = &sbom.components {
-        if sbom_components.len() > 0 {
-            let mut or = "";
-            for component in sbom_components {
-                query.push_str(&format!(" {} public.components.name = '{}'", or, component.name));
-                or = "OR"; // =) Debil'
+    let mut bugs = Vec::<Bugs>::new();
+    match row {
+        Ok(row) =>
+            for r in row {
+                bugs.push(Bugs {
+                    component: r.get::<_, Json<sbom5::Component>>(0).0,
+                    vuln: r.get::<_, Json<bdu::Component>>(1).0,
+                });
             }
-            query.push_str(";");
-            for row in client.query(&query, &[]).expect("pizdec") {
-                let id: &str = row.get(0);
-                let name: &str = row.get(1);
-                let name_: &str = row.get(2);
-                println!("Name: {} BDU id: {}, BDU name: {}", name_, id, name);
-            }
-        }
+        Err(err) => print!("{}", err),
     }
+    Ok(bugs)
 }

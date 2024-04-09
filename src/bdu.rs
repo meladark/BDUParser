@@ -87,15 +87,6 @@ pub struct Platform {
     pub version: Option<String>,
 }
 
-// pub fn xlsx_parser_parallel(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
-//     let mut workbook: Xlsx<_> = open_workbook(Path::new(pt)).expect("Cannot open file");
-//     if let Ok(range) = workbook.worksheet_range(sheet_name) {
-//         let mut bdu_components: Vec<Component> = Vec::new();
-//
-//         return Some(bdu_components);
-//     }
-//     None
-// }
 #[allow(dead_code)]
 pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
     let mut workbook: Xlsx<_> = open_workbook(Path::new(pt)).expect("Cannot open file");
