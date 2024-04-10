@@ -5,3 +5,5 @@ Cargo.lock
 postgres_data
 .vscode
 cyclonedx-*
+out
+vull.xlsx
