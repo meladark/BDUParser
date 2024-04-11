@@ -34,11 +34,17 @@ impl BD {
     /// Пример для урла - *postgresql://bdu:bdu@localhost:5433/bdu*
     pub async fn new(postgres_url: &String) -> Result<Self, String> {
         match tokio_postgres::connect(&postgres_url, NoTls).await {
-            Ok((_client, _connection)) =>
+            Ok((_client, _connection)) => {
+                tokio::spawn(async move {
+                    if let Err(e) = _connection.await {
+                        eprintln!("Connection error: {}", e);
+                    }
+                });
                 Ok(Self {
                     client: _client,
                     // connection: _connection,
-                }),
+                })
+            }
             Err(err) => Err(format!("Error connect: {}", err)),
         }
     }
@@ -63,10 +69,6 @@ impl BD {
             }
             Err(err) => Err(format!("Error connect: {}", err)),
         }
-    }
-
-    pub async fn spawn(&self) -> Result<(), String> {
-        Ok(())
     }
 
     async fn find_bug_bd_one_query(&self, id: i32) -> Result<Vec<Bugs>, String> {
@@ -140,7 +142,7 @@ impl BD {
                 .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
-            Command::new("./cyclonedx-linux-x64")
+            Command::new("cyclonedx-linux-x64")// TODO: change ? ./cyclonedx-linux-x64
                 .arg("convert")
                 .args(["--input-file", foo, "--output-format", "json", "--output-version", "v1_5"])
                 .output()
