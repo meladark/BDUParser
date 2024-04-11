@@ -2,11 +2,11 @@ use std::{ fs, process::Command };
 
 // #![crate_name = "doc"]
 use crate::{ bdu::{ self, xlsx_parser, Component }, sbom5 };
-use postgres::{ tls::NoTlsStream, types::Json, Socket };
+use postgres::types::Json;
 use regex::Regex;
 use serde_json::json;
 
-use tokio_postgres::{ Connection, Error, NoTls };
+use tokio_postgres::NoTls;
 
 pub struct Bugs {
     pub component: sbom5::Component,

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod test {
-    use std::{ fs, path::Path, time::Instant };
+    use std::time::Instant;
 
     use crate::bd::BD;
 
