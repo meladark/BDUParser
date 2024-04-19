@@ -130,6 +130,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                             .to_string()
                             .split(", ")
                             .map(&str::to_string)
+                            .filter(|x| x != "")
                             .collect()
                     );
                     match ret {
@@ -145,6 +146,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                             .to_string()
                             .split(", ")
                             .map(&str::to_string)
+                            .filter(|x| x != "")
                             .collect()
                     );
                     match ret {
@@ -267,6 +269,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                             .to_string()
                             .split(", ")
                             .map(&str::to_string)
+                            .filter(|x| x != "")
                             .collect()
                     );
                     match ret {
@@ -453,6 +456,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                             .to_string()
                             .split(", ")
                             .map(str::to_string)
+                            .filter(|x| x != "")
                             .collect()
                     );
                     match ret {
@@ -489,6 +493,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                                 .to_string()
                                 .split(", ")
                                 .map(str::to_string)
+                                .filter(|x| x != "")
                                 .collect()
                         );
                         match ret {
@@ -504,6 +509,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                                 .to_string()
                                 .split(", ")
                                 .map(str::to_string)
+                                .filter(|x| x != "")
                                 .collect()
                         );
                         match ret {
