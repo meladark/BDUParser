@@ -22,7 +22,7 @@ pub struct Component {
     pub name: Option<Vec<String>>,
     pub v_test: Option<Vec<String>>,
     /// Версия ПО
-    pub versions: Option<Vec<Version>>,
+    pub versions: Vec<Version>,
     /// Тип ПО
     pub software_types: Option<Vec<String>>,
     pub v_platforms: Option<Vec<String>>,
@@ -98,36 +98,60 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                     .get_value((hight.try_into().unwrap(), (0).try_into().unwrap()))
                     .expect("Not id")
                     .to_string(),
-                name_vuln: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (1).try_into().unwrap()))
-                        .expect("Not name_vuln")
-                        .to_string()
-                ),
-                desc_vuln: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (2).try_into().unwrap()))
-                        .expect("desc_vuln")
-                        .to_string()
-                ),
-                vendors: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (3).try_into().unwrap()))
-                        .expect("vendor")
-                        .to_string()
-                        .split(", ")
-                        .map(&str::to_string)
-                        .collect()
-                ),
-                name: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (4).try_into().unwrap()))
-                        .expect("name")
-                        .to_string()
-                        .split(", ")
-                        .map(&str::to_string)
-                        .collect()
-                ),
+                name_vuln: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (1).try_into().unwrap()))
+                            .expect("Not name_vuln")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                desc_vuln: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (2).try_into().unwrap()))
+                            .expect("desc_vuln")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                vendors: {
+                    let ret: Option<Vec<String>> = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (3).try_into().unwrap()))
+                            .expect("vendor")
+                            .to_string()
+                            .split(", ")
+                            .map(&str::to_string)
+                            .collect()
+                    );
+                    match ret {
+                        Some(r) => if r.len() > 0 { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                name: {
+                    let ret: Option<Vec<String>> = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (4).try_into().unwrap()))
+                            .expect("name")
+                            .to_string()
+                            .split(", ")
+                            .map(&str::to_string)
+                            .collect()
+                    );
+                    match ret {
+                        Some(r) => if r.len() > 0 { Some(r) } else { None }
+                        None => None,
+                    }
+                },
                 v_test: Some(
                     range
                         .get_value((hight.try_into().unwrap(), (5).try_into().unwrap()))
@@ -137,7 +161,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .map(&str::to_string)
                         .collect()
                 ),
-                versions: Some({
+                versions: {
                     let mut ret: Vec<Version> = Vec::new();
                     // TODO: добавить нормальные формы для всех полей
                     let re = Regex::new(
@@ -166,7 +190,11 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                                         ret = c;
                                     }
                                 }
-                                Some(ret)
+                                if ret != "".to_string() {
+                                    Some(ret)
+                                } else {
+                                    None
+                                }
                             },
                             to: {
                                 let mut ret = "".to_string();
@@ -180,14 +208,23 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                                         ret = c;
                                     }
                                 }
-                                Some(ret)
+                                if ret != "".to_string() {
+                                    Some(ret)
+                                } else {
+                                    None
+                                }
                             },
-                            only: Some(
-                                caps
+                            only: {
+                                let ret = caps
                                     .name("only")
                                     .map_or("", |m| m.as_str())
-                                    .to_string()
-                            ),
+                                    .to_string();
+                                if ret != "".to_string() {
+                                    Some(ret)
+                                } else {
+                                    None
+                                }
+                            },
                             inclusive: {
                                 if
                                     caps
@@ -221,16 +258,22 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         });
                     }
                     ret
-                }),
-                software_types: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (6).try_into().unwrap()))
-                        .expect("type_field")
-                        .to_string()
-                        .split(", ")
-                        .map(&str::to_string)
-                        .collect()
-                ),
+                },
+                software_types: {
+                    let ret: Option<Vec<String>> = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (6).try_into().unwrap()))
+                            .expect("type_field")
+                            .to_string()
+                            .split(", ")
+                            .map(&str::to_string)
+                            .collect()
+                    );
+                    match ret {
+                        Some(r) => if r.len() > 0 { Some(r) } else { None }
+                        None => None,
+                    }
+                },
                 v_platforms: Some(
                     range
                         .get_value((hight.try_into().unwrap(), (7).try_into().unwrap()))
@@ -240,117 +283,195 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .map(&str::to_string)
                         .collect()
                 ),
-                platforms: Some({
-                    let mut ret: Vec<Platform> = Vec::new();
-                    let re = Regex::new(
-                        r"^(?<name>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) \((?<version>[[[:alnum:]][[:blank:]][[:punct:]][а-яА-Яё«»№-]]*)\)"
-                    ).unwrap();
-                    for platform in range
-                        .get_value((hight.try_into().unwrap(), (7).try_into().unwrap()))
-                        .expect("platform")
-                        .to_string()
-                        .split(", ")
-                        .map(&str::to_string)
-                        .into_iter() {
-                        let Some(caps) = re.captures(&platform) else {
-                            continue;
-                        };
-                        ret.push(Platform {
-                            name: Some(
-                                caps
-                                    .name("name")
-                                    .map_or("", |m| m.as_str())
-                                    .to_string()
-                            ),
-                            version: Some(
-                                caps
-                                    .name("version")
-                                    .map_or("", |m| m.as_str())
-                                    .to_string()
-                            ),
-                        });
+                platforms: {
+                    let ret: Option<Vec<Platform>> = Some({
+                        let mut ret: Vec<Platform> = Vec::new();
+                        let re = Regex::new(
+                            r"^(?<name>[[[:alnum:]][[:punct:]][[:blank:]][а-яА-Яё«»№-]]*) \((?<version>[[[:alnum:]][[:blank:]][[:punct:]][а-яА-Яё«»№-]]*)\)"
+                        ).unwrap();
+                        for platform in range
+                            .get_value((hight.try_into().unwrap(), (7).try_into().unwrap()))
+                            .expect("platform")
+                            .to_string()
+                            .split(", ")
+                            .map(&str::to_string)
+                            .into_iter() {
+                            let Some(caps) = re.captures(&platform) else {
+                                continue;
+                            };
+                            ret.push(Platform {
+                                name: Some(
+                                    caps
+                                        .name("name")
+                                        .map_or("", |m| m.as_str())
+                                        .to_string()
+                                ),
+                                version: Some(
+                                    caps
+                                        .name("version")
+                                        .map_or("", |m| m.as_str())
+                                        .to_string()
+                                ),
+                            });
+                        }
+                        ret
+                    });
+                    match ret {
+                        Some(r) => if r.len() > 0 { Some(r) } else { None }
+                        None => None,
                     }
-                    ret
-                }),
-                class_vuln: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (8).try_into().unwrap()))
-                        .expect("class_vuln")
-                        .to_string()
-                ),
-                date: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (9).try_into().unwrap()))
-                        .expect("date")
-                        .to_string()
-                ),
-                cvss2: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (10).try_into().unwrap()))
-                        .expect("cvss2")
-                        .to_string()
-                ),
-                cvss3: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (11).try_into().unwrap()))
-                        .expect("cvss3")
-                        .to_string()
-                ),
-                severity: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (12).try_into().unwrap()))
-                        .expect("severity")
-                        .to_string()
-                ),
-                possible_fix: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (13).try_into().unwrap()))
-                        .expect("possible_fix")
-                        .to_string()
-                ),
-                status_vuln: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (14).try_into().unwrap()))
-                        .expect("status_vuln")
-                        .to_string()
-                ),
-                exploit: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (15).try_into().unwrap()))
-                        .expect("exploit")
-                        .to_string()
-                ),
-                fix: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (16).try_into().unwrap()))
-                        .expect("fix")
-                        .to_string()
-                ),
-                source_sites: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (17).try_into().unwrap()))
-                        .expect("source_sites")
-                        .to_string()
-                        .split("\n")
-                        .map(str::to_string)
-                        .filter(|x| x != "")
-                        .collect()
-                ),
-                id_another_system: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (18).try_into().unwrap()))
-                        .expect("id_another_system")
-                        .to_string()
-                        .split(", ")
-                        .map(str::to_string)
-                        .collect()
-                ),
-                info: Some(
-                    range
-                        .get_value((hight.try_into().unwrap(), (19).try_into().unwrap()))
-                        .expect("info")
-                        .to_string()
-                ),
+                },
+                class_vuln: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (8).try_into().unwrap()))
+                            .expect("class_vuln")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                date: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (9).try_into().unwrap()))
+                            .expect("date")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                cvss2: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (10).try_into().unwrap()))
+                            .expect("cvss2")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                cvss3: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (11).try_into().unwrap()))
+                            .expect("cvss3")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                severity: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (12).try_into().unwrap()))
+                            .expect("severity")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                possible_fix: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (13).try_into().unwrap()))
+                            .expect("possible_fix")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                status_vuln: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (14).try_into().unwrap()))
+                            .expect("status_vuln")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                exploit: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (15).try_into().unwrap()))
+                            .expect("exploit")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                fix: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (16).try_into().unwrap()))
+                            .expect("fix")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                source_sites: {
+                    let ret: Option<Vec<String>> = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (17).try_into().unwrap()))
+                            .expect("source_sites")
+                            .to_string()
+                            .split("\n")
+                            .map(str::to_string)
+                            .filter(|x| x != "")
+                            .collect()
+                    );
+                    match ret {
+                        Some(r) => if r.len() > 0 { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                id_another_system: {
+                    let ret: Option<Vec<String>> = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (18).try_into().unwrap()))
+                            .expect("id_another_system")
+                            .to_string()
+                            .split(", ")
+                            .map(str::to_string)
+                            .collect()
+                    );
+                    match ret {
+                        Some(r) => if r.len() > 0 { Some(r) } else { None }
+                        None => None,
+                    }
+                },
+                info: {
+                    let ret = Some(
+                        range
+                            .get_value((hight.try_into().unwrap(), (19).try_into().unwrap()))
+                            .expect("info")
+                            .to_string()
+                    );
+                    match ret {
+                        Some(r) => if r != "".to_string() { Some(r) } else { None }
+                        None => None,
+                    }
+                },
                 conn_is: Some(
                     range
                         .get_value((hight.try_into().unwrap(), (20).try_into().unwrap()))
@@ -360,24 +481,36 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         .unwrap()
                 ),
                 cwe: CWE {
-                    info: Some(
-                        range
-                            .get_value((hight.try_into().unwrap(), (21).try_into().unwrap()))
-                            .expect("cwe info")
-                            .to_string()
-                            .split(", ")
-                            .map(str::to_string)
-                            .collect()
-                    ),
-                    id: Some(
-                        range
-                            .get_value((hight.try_into().unwrap(), (22).try_into().unwrap()))
-                            .expect("cwe id")
-                            .to_string()
-                            .split(", ")
-                            .map(str::to_string)
-                            .collect()
-                    ),
+                    info: {
+                        let ret: Option<Vec<String>> = Some(
+                            range
+                                .get_value((hight.try_into().unwrap(), (21).try_into().unwrap()))
+                                .expect("cwe info")
+                                .to_string()
+                                .split(", ")
+                                .map(str::to_string)
+                                .collect()
+                        );
+                        match ret {
+                            Some(r) => if r.len() > 0 { Some(r) } else { None }
+                            None => None,
+                        }
+                    },
+                    id: {
+                        let ret: Option<Vec<String>> = Some(
+                            range
+                                .get_value((hight.try_into().unwrap(), (22).try_into().unwrap()))
+                                .expect("cwe id")
+                                .to_string()
+                                .split(", ")
+                                .map(str::to_string)
+                                .collect()
+                        );
+                        match ret {
+                            Some(r) => if r.len() > 0 { Some(r) } else { None }
+                            None => None,
+                        }
+                    },
                 },
             });
         }

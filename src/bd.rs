@@ -142,7 +142,7 @@ impl BD {
                 .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
-            Command::new("cyclonedx-linux-x64")// TODO: change ? ./cyclonedx-linux-x64
+            Command::new("cyclonedx-linux-x64") // TODO: change ? ./cyclonedx-linux-x64
                 .arg("convert")
                 .args(["--input-file", foo, "--output-format", "json", "--output-version", "v1_5"])
                 .output()
@@ -451,7 +451,8 @@ impl BD {
                         ]
                     ).await
                     .expect("pizdec");
-                if let Some(versions) = &component.versions {
+                let versions = &component.versions;
+                {
                     if versions.len() > 0 {
                         for version in versions {
                             let _ = self.client
@@ -471,12 +472,12 @@ impl BD {
                                             id_bdu
                                         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
                                     &[
-                                        &Some(&version.name),
-                                        &Some(&version.from),
-                                        &Some(&version.to),
-                                        &Some(&version.only),
-                                        &Some(&version.inclusive),
-                                        {
+                                        &version.name,
+                                        &version.from,
+                                        &version.to,
+                                        &version.only,
+                                        &version.inclusive,
+                                        &{
                                             let mut ret = 0_i32;
                                             if let Some(from) = &version.from {
                                                 let names = [
@@ -495,9 +496,9 @@ impl BD {
                                                     }
                                                 }
                                             }
-                                            &Some(ret)
+                                            ret
                                         },
-                                        {
+                                        &{
                                             let mut ret = 0_i32;
                                             if let Some(from) = &version.from {
                                                 let names = ["minor_full", "minor_sep"];
@@ -512,9 +513,9 @@ impl BD {
                                                     }
                                                 }
                                             }
-                                            &Some(ret)
+                                            ret
                                         },
-                                        {
+                                        &{
                                             let mut ret = 0_i32;
                                             if let Some(from) = &version.from {
                                                 let names = ["patch_full"];
@@ -529,9 +530,9 @@ impl BD {
                                                     }
                                                 }
                                             }
-                                            &Some(ret)
+                                            ret
                                         },
-                                        {
+                                        &{
                                             let mut ret = 0_i32;
                                             if let Some(to) = &version.to {
                                                 let names = [
@@ -550,9 +551,9 @@ impl BD {
                                                     }
                                                 }
                                             }
-                                            &Some(ret)
+                                            ret
                                         },
-                                        {
+                                        &{
                                             let mut ret = 0_i32;
                                             if let Some(to) = &version.to {
                                                 let names = ["minor_full", "minor_sep"];
@@ -567,9 +568,9 @@ impl BD {
                                                     }
                                                 }
                                             }
-                                            &Some(ret)
+                                            ret
                                         },
-                                        {
+                                        &{
                                             let mut ret = 0_i32;
                                             if let Some(to) = &version.to {
                                                 let names = ["patch_full"];
@@ -584,7 +585,7 @@ impl BD {
                                                     }
                                                 }
                                             }
-                                            &Some(ret)
+                                            ret
                                         },
                                         &component.id,
                                     ]
@@ -629,9 +630,10 @@ impl BD {
                             }
                         }
                     }
-                } else {
-                    print!("No version {}", &component.id);
                 }
+                // else {
+                //     print!("No version {}", &component.id);
+                // }
                 if let Some(platforms) = &component.platforms {
                     for platform in platforms {
                         let pl = self.client
