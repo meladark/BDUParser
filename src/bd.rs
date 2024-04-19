@@ -149,10 +149,19 @@ impl BD {
                 .expect("failed to execute process")
         };
         let sbom: sbom5::Root;
+        let mut _id = 0;
         if output.status.success() {
-            sbom = serde_json
-                ::from_str::<sbom5::Root>(&String::from_utf8(output.stdout).expect("pizdec conver"))
-                .expect("Bad json");
+            let cin = &String::from_utf8(output.stdout).expect("pizdec conver");
+            let ans = self.client
+                .query(
+                    "
+            INSERT INTO public.\"SBOM_raw\" (sbom) VALUES ($1) RETURNING id;
+            ",
+                    &[&json!(&cin)]
+                ).await
+                .expect("Error insert into SBOM_raw");
+            _id = ans[0].get::<_, i32>(0);
+            sbom = serde_json::from_str::<sbom5::Root>(&cin).expect("Bad json");
         } else {
             return Err(
                 format!(
@@ -162,21 +171,6 @@ impl BD {
                 )
             );
         }
-        // let mut client = match Client::connect(&self.client, NoTls) {
-        //     Ok(c) => c,
-        //     Err(err) => {
-        //         return Err(format!("Error: {}", err));
-        //     }
-        // };
-        let ans = self.client
-            .query(
-                "
-            INSERT INTO public.\"SBOM_raw\" (sbom) VALUES ($1) RETURNING id;
-            ",
-                &[&json!(&foo)]
-            ).await
-            .expect("Error insert into SBOM_raw");
-        let mut _id = ans[0].get::<_, i32>(0);
         let mut count = 0;
         if let Some(sbom_component) = &sbom.components {
             let re = Regex::new(r"(?<major>\d+).(?<minor>\d+).(?<patch>\d+)").expect("Error regex");
@@ -477,7 +471,7 @@ impl BD {
                                         &version.to,
                                         &version.only,
                                         &version.inclusive,
-                                        &{
+                                        &({
                                             let mut ret = 0_i32;
                                             if let Some(from) = &version.from {
                                                 let names = [
@@ -497,8 +491,8 @@ impl BD {
                                                 }
                                             }
                                             ret
-                                        },
-                                        &{
+                                        }),
+                                        &({
                                             let mut ret = 0_i32;
                                             if let Some(from) = &version.from {
                                                 let names = ["minor_full", "minor_sep"];
@@ -514,8 +508,8 @@ impl BD {
                                                 }
                                             }
                                             ret
-                                        },
-                                        &{
+                                        }),
+                                        &({
                                             let mut ret = 0_i32;
                                             if let Some(from) = &version.from {
                                                 let names = ["patch_full"];
@@ -531,8 +525,8 @@ impl BD {
                                                 }
                                             }
                                             ret
-                                        },
-                                        &{
+                                        }),
+                                        &({
                                             let mut ret = 0_i32;
                                             if let Some(to) = &version.to {
                                                 let names = [
@@ -552,8 +546,8 @@ impl BD {
                                                 }
                                             }
                                             ret
-                                        },
-                                        &{
+                                        }),
+                                        &({
                                             let mut ret = 0_i32;
                                             if let Some(to) = &version.to {
                                                 let names = ["minor_full", "minor_sep"];
@@ -569,8 +563,8 @@ impl BD {
                                                 }
                                             }
                                             ret
-                                        },
-                                        &{
+                                        }),
+                                        &({
                                             let mut ret = 0_i32;
                                             if let Some(to) = &version.to {
                                                 let names = ["patch_full"];
@@ -586,7 +580,7 @@ impl BD {
                                                 }
                                             }
                                             ret
-                                        },
+                                        }),
                                         &component.id,
                                     ]
                                 ).await
