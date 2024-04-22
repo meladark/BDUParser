@@ -5,7 +5,7 @@ use crate::{ bdu::{ self, xlsx_parser, Component }, sbom5 };
 use postgres::types::Json;
 use regex::Regex;
 use serde_json::json;
-
+use log::{info, warn};
 use tokio_postgres::NoTls;
 
 pub struct Bugs {
@@ -16,7 +16,6 @@ pub struct Bugs {
 pub struct BD {
     ///
     client: tokio_postgres::Client,
-    // connection: Connection<Socket, NoTlsStream>,
 }
 
 impl BD {
@@ -33,6 +32,7 @@ impl BD {
     ///
     /// Пример для урла - *postgresql://bdu:bdu@localhost:5433/bdu*
     pub async fn new(postgres_url: &String) -> Result<Self, String> {
+        info!("Start new connection on {}", postgres_url);
         match tokio_postgres::connect(&postgres_url, NoTls).await {
             Ok((_client, _connection)) => {
                 tokio::spawn(async move {
@@ -42,7 +42,6 @@ impl BD {
                 });
                 Ok(Self {
                     client: _client,
-                    // connection: _connection,
                 })
             }
             Err(err) => Err(format!("Error connect: {}", err)),
@@ -50,6 +49,7 @@ impl BD {
     }
 
     pub async fn default() -> Result<Self, String> {
+        info!("Start default connection");
         match
             tokio_postgres::connect(
                 &"postgresql://bdu:bdu@localhost:5433/bdu".to_string(),
@@ -59,7 +59,7 @@ impl BD {
             Ok((_client, _connection)) => {
                 tokio::spawn(async move {
                     if let Err(e) = _connection.await {
-                        eprintln!("Connection error: {}", e);
+                        warn!("Connection error: {}", e);
                     }
                 });
                 Ok(Self {
@@ -72,12 +72,6 @@ impl BD {
     }
 
     async fn find_bug_bd_one_query(&self, id: i32) -> Result<Vec<Bugs>, String> {
-        // let mut client = match Client::connect(&host, NoTls) {
-        //     Ok(c) => c,
-        //     Err(err) => {
-        //         return Err(format!("Error: {}", err));
-        //     }
-        // };
         let row = self.client
             .query(
                 "SELECT public.sbom_components.\"raw\", public.\"BDU\".\"raw\"
@@ -625,9 +619,6 @@ impl BD {
                         }
                     }
                 }
-                // else {
-                //     print!("No version {}", &component.id);
-                // }
                 if let Some(platforms) = &component.platforms {
                     for platform in platforms {
                         let pl = self.client
