@@ -5,9 +5,10 @@ use crate::{ bdu::{ self, xlsx_parser, Component }, sbom5 };
 use postgres::types::Json;
 use regex::Regex;
 use serde_json::json;
-use log::{info, warn};
+use log::{ debug, error, info, trace };
 use tokio_postgres::NoTls;
 
+#[derive(Debug)]
 pub struct Bugs {
     pub component: sbom5::Component,
     pub vuln: bdu::Component,
@@ -21,8 +22,6 @@ pub struct BD {
 impl BD {
     #[allow(dead_code)]
     /// Создание нового подключения.
-    /// Подключение происходит при каждом вызове методов.
-    /// Тут лишь сохраняются параметры.
     ///
     /// # Arguments
     ///
@@ -37,17 +36,21 @@ impl BD {
             Ok((_client, _connection)) => {
                 tokio::spawn(async move {
                     if let Err(e) = _connection.await {
-                        eprintln!("Connection error: {}", e);
+                        error!("Connection async move error: {}", e);
                     }
                 });
                 Ok(Self {
                     client: _client,
                 })
             }
-            Err(err) => Err(format!("Error connect: {}", err)),
+            Err(err) => {
+                error!("Error connect: {}", err);
+                Err(format!("Error connect: {}", err))
+            }
         }
     }
-
+    /// Создание нового default подключения.
+    /// Стандартное подключение - *postgresql://bdu:bdu@localhost:5433/bdu*
     pub async fn default() -> Result<Self, String> {
         info!("Start default connection");
         match
@@ -59,19 +62,22 @@ impl BD {
             Ok((_client, _connection)) => {
                 tokio::spawn(async move {
                     if let Err(e) = _connection.await {
-                        warn!("Connection error: {}", e);
+                        error!("Connection error: {}", e);
                     }
                 });
                 Ok(Self {
                     client: _client,
-                    // connection: _connection,
                 })
             }
-            Err(err) => Err(format!("Error connect: {}", err)),
+            Err(err) => {
+                error!("Error connect: {}", err);
+                Err(format!("Error connect: {}", err))
+            }
         }
     }
 
     async fn find_bug_bd_one_query(&self, id: i32) -> Result<Vec<Bugs>, String> {
+        info!("Start findings bugs!");
         let row = self.client
             .query(
                 "SELECT public.sbom_components.\"raw\", public.\"BDU\".\"raw\"
@@ -89,18 +95,31 @@ impl BD {
                 vuln: r.get::<_, Json<bdu::Component>>(1).0,
             });
         }
+        info!("Found {} bugs!", bugs.len());
+        if bugs.len() > 0 {
+            for bug in &bugs {
+                trace!("Bugs: {:?}", &bug);
+            }
+        } else {
+            trace!("Bugs not found =(");
+        }
         Ok(bugs)
     }
 
     #[allow(dead_code)]
+    /// Обновление Базы данных БДУ.
+    /// Необходимо чтобы в системе стоял *wget*.
+    /// Не поддерживается Windows
     pub async fn update(&self) -> Result<(), String> {
         let output = if cfg!(target_os = "windows") {
+            error!("Carga doesn`t support windows yet!");
             Command::new("cmd")
                 .args(["/C", "Windows doesn`t support yet"])
                 .output()
                 .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
+            debug!("Start load BDU xlsx");
             Command::new("wget")
                 .arg("--no-check-certificate")
                 .arg("https://bdu.fstec.ru/files/documents/vullist.xlsx")
@@ -111,31 +130,48 @@ impl BD {
         };
         if output.status.success() {
             let bdu_components = xlsx_parser(&String::from("vull.xlsx"), &String::from("Sheet"));
+            trace!("Deleting vull.xlsx");
             fs::remove_file("vull.xlsx").expect("Error delete vull.xlsx");
+            trace!("Deleted vull.xlsx");
             if let Some(components) = bdu_components {
-                return self.connect(&components).await;
+                return self.upload(&components).await;
             } else {
+                error!("Faild to parse xlsx BDU");
                 return Err("Faild to parse xlsx BDU".to_string());
             }
         } else {
-            return Err(
-                format!(
-                    "Get BDU database error: Message: {} Status: {}",
-                    String::from_utf8(output.stdout).expect("pizdec conver"),
-                    output.status
-                )
+            let res = format!(
+                "Get BDU database error: Message: {} Status: {}",
+                String::from_utf8(output.stdout).expect("pizdec conver"),
+                output.status
             );
+            error!("{}", &res);
+            return Err(res);
         }
     }
     #[allow(dead_code)]
+    /// Поиск уязвимостей в sbom файле.
+    /// Работает только на Linux. Для работы требуется cyclonedx-linux-x64 в системе для работы.
+    /// При загрузке файла, происходит попытка сконвертировать файл в sbom v1.5 json для общей работы.
+    /// Сохраняется только удачно сконвертированный sbom.
+    ///
+    /// # Arguments
+    ///
+    /// * `foo` - Путь до sbom файла.
+    ///
+    /// # Todo
+    ///
+    /// Хранить ли сырой пришедший файл?
     pub async fn find(&self, foo: &String) -> Result<Vec<Bugs>, String> {
         let output = if cfg!(target_os = "windows") {
+            error!("Carga doesn`t support windows.");
             Command::new("cmd")
                 .args(["/C", "Windows doesn`t support yet"])
                 .output()
                 .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
+            debug!("Start sbom converted!");
             Command::new("cyclonedx-linux-x64") // TODO: change ? ./cyclonedx-linux-x64
                 .arg("convert")
                 .args(["--input-file", foo, "--output-format", "json", "--output-version", "v1_5"])
@@ -157,13 +193,13 @@ impl BD {
             _id = ans[0].get::<_, i32>(0);
             sbom = serde_json::from_str::<sbom5::Root>(&cin).expect("Bad json");
         } else {
-            return Err(
-                format!(
-                    "Convert Error: Message: {} Status: {}",
-                    String::from_utf8(output.stdout).expect("pizdec conver"),
-                    output.status
-                )
+            let ret = format!(
+                "Convert Error: Message: {} Status: {}",
+                String::from_utf8(output.stdout).expect("pizdec conver"),
+                output.status
             );
+            error!("{}", &ret);
+            return Err(ret);
         }
         let mut count = 0;
         if let Some(sbom_component) = &sbom.components {
@@ -225,13 +261,6 @@ impl BD {
                 if row > 0 {
                     count += 1;
                 }
-
-                // match row {
-                //     Ok(_) => {
-                //         count += 1;
-                //     }
-                //     Err(err) => println!("[Error] Error add sbom component to postgres: {}", err),
-                // }
             }
             println!("[Info] Add {}/{} sbom components.", count, sbom_component.len());
         } else {
@@ -240,13 +269,7 @@ impl BD {
         self.find_bug_bd_one_query(_id).await
     }
     #[allow(dead_code)]
-    async fn connect(&self, components: &Vec<Component>) -> Result<(), String> {
-        // let mut client = match Client::connect(&host, NoTls) {
-        //     Ok(c) => c,
-        //     Err(err) => {
-        //         return Err(format!("Error: {}", err));
-        //     }
-        // };
+    async fn upload(&self, components: &Vec<Component>) -> Result<(), String> {
         self.client
             .batch_execute(
                 "
@@ -377,6 +400,7 @@ impl BD {
         let re = Regex::new(
             r"^(?<major_full>[[:digit:]]+)\.(?<minor_full>[[:digit:]]+)\.(?<patch_full>[[:digit:]]+)|^(?<major_sep>[[:digit:]]+)\.(?<minor_sep>[[:digit:]]+)|^(?<major_only>[[:digit:]]+)"
         ).unwrap();
+        let mut counter = 0;
         for component in components {
             let _k = self.client
                 .query(
@@ -385,9 +409,10 @@ impl BD {
                 ).await
                 .expect("pizdec query");
             if _k.len() > 0 {
-                //print!("Exist!")
+                trace!("Component {} exist!", &component.id);
             } else {
-                //print!("Not Exist!");
+                counter += 1;
+                trace!("Add Component {}) {}!", counter, &component.id);
                 // TODO: Настроить правильные поля, к примеру время как время
                 let _ = self.client
                     .execute(
@@ -663,6 +688,7 @@ impl BD {
                 }
             }
         }
+        info!("Add {}/{} BDU.", counter, components.len());
         Ok(())
     }
 }
