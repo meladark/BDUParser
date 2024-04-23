@@ -76,23 +76,88 @@ impl BD {
         }
     }
 
-    async fn find_bug_bd_one_query(&self, id: i32) -> Result<Vec<Bugs>, String> {
+    async fn find_bug_bd_one_query(&self, id: i32, full: bool) -> Result<Vec<Bugs>, String> {
         info!("Start findings bugs!");
-        let row = self.client
-            .query(
+        let query;
+        if full {
+            query =
                 "SELECT public.sbom_components.\"raw\", public.\"BDU\".\"raw\"
-        FROM public.sbom_components 
-        INNER JOIN public.components 
-        ON public.sbom_components.name = public.components.name INNER JOIN public.\"BDU\" ON public.components.id_bdu = public.\"BDU\".id
-        WHERE public.sbom_components.\"SBOM_raw\" = $1;",
-                &[&id]
-            ).await
+            FROM public.sbom_components 
+            INNER JOIN public.components 
+            ON public.sbom_components.name = public.components.name INNER JOIN public.\"BDU\" ON public.components.id_bdu = public.\"BDU\".id
+            WHERE public.sbom_components.\"SBOM_raw\" = $1;";
+        } else {
+            query =
+                "SELECT
+            public.sbom_components.\"raw\",
+            public.\"BDU\".\"raw\"
+        FROM
+            public.sbom_components
+            INNER JOIN public.components ON public.sbom_components.name = public.components.name
+            INNER JOIN public.\"BDU\" ON public.components.id_bdu = public.\"BDU\".id
+        WHERE
+            public.sbom_components.\"SBOM_raw\" = $1
+            AND (
+                public.sbom_components.version = public.components.only
+                OR (
+                    (
+                        public.sbom_components.major >= public.components.from_major
+                        OR (
+                            public.sbom_components.major >= public.components.from_major
+                            AND public.sbom_components.minor >= public.components.from_minor
+                        )
+                        OR (
+                            public.sbom_components.major >= public.components.from_major
+                            AND public.sbom_components.minor >= public.components.from_minor
+                            AND public.sbom_components.patch >= public.components.from_patch
+                        )
+                    )
+                    AND (
+                        (
+                            public.components.inclusive
+                            AND (
+                                public.sbom_components.major <= public.components.to_major
+                                OR (
+                                    public.sbom_components.major <= public.components.to_major
+                                    AND public.sbom_components.minor <= public.components.to_minor
+                                )
+                                OR (
+                                    public.sbom_components.major <= public.components.to_major
+                                    AND public.sbom_components.minor <= public.components.to_minor
+                                    AND public.sbom_components.patch <= public.components.to_patch
+                                )
+                            )
+                        )
+                        OR (
+                            NOT public.components.inclusive
+                            AND (
+                                public.sbom_components.major < public.components.to_major
+                                OR (
+                                    public.sbom_components.major < public.components.to_major
+                                    AND public.sbom_components.minor < public.components.to_minor
+                                )
+                                OR (
+                                    public.sbom_components.major < public.components.to_major
+                                    AND public.sbom_components.minor < public.components.to_minor
+                                    AND public.sbom_components.patch < public.components.to_patch
+                                )
+                            )
+                        )
+                    )
+                )
+            );";
+        }
+        let row = self.client
+            .query(query, &[&id]).await
             .expect("Error SELECT public.sbom_components.\"raw\"");
+
         let mut bugs = Vec::<Bugs>::new();
         for r in row {
+            let c = r.get::<_, Json<sbom5::Component>>(0).0;
+            let v = r.get::<_, Json<bdu::Component>>(1).0;
             bugs.push(Bugs {
-                component: r.get::<_, Json<sbom5::Component>>(0).0,
-                vuln: r.get::<_, Json<bdu::Component>>(1).0,
+                component: c,
+                vuln: v,
             });
         }
         info!("Found {} bugs!", bugs.len());
@@ -158,11 +223,12 @@ impl BD {
     /// # Arguments
     ///
     /// * `foo` - Путь до sbom файла.
+    /// * `full` - Найти все совпадения по именам, игнорируя версии.
     ///
     /// # Todo
     ///
     /// Хранить ли сырой пришедший файл?
-    pub async fn find(&self, foo: &String) -> Result<Vec<Bugs>, String> {
+    pub async fn find(&self, foo: &String, full: bool) -> Result<Vec<Bugs>, String> {
         let output = if cfg!(target_os = "windows") {
             error!("Carga doesn`t support windows.");
             Command::new("cmd")
@@ -203,7 +269,9 @@ impl BD {
         }
         let mut count = 0;
         if let Some(sbom_component) = &sbom.components {
-            let re = Regex::new(r"(?<major>\d+).(?<minor>\d+).(?<patch>\d+)").expect("Error regex");
+            let re = Regex::new(
+                r"(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)|(?<major_2>\d+)\.(?<minor_2>\d+)|(?<major_3>\d+)"
+            ).expect("Error regex");
             for component in sbom_component {
                 let row = self.client
                     .execute(
@@ -214,11 +282,14 @@ impl BD {
                             {
                                 let mut ret = 0_i32;
                                 if let Some(ver) = &component.version {
+                                    let names = ["major", "major_2", "major_3"];
                                     if let Some(caps) = re.captures(&ver) {
-                                        if let Some(c) = caps.name("major") {
-                                            let nop = c.as_str().parse::<i32>();
-                                            if !nop.is_err() {
-                                                ret = nop.unwrap();
+                                        for name in names {
+                                            if let Some(c) = caps.name(name) {
+                                                let nop = c.as_str().parse::<i32>();
+                                                if !nop.is_err() {
+                                                    ret = nop.unwrap();
+                                                }
                                             }
                                         }
                                     }
@@ -228,11 +299,14 @@ impl BD {
                             {
                                 let mut ret = 0_i32;
                                 if let Some(ver) = &component.version {
+                                    let names = ["minor", "minor_2"];
                                     if let Some(caps) = re.captures(&ver) {
-                                        if let Some(c) = caps.name("minor") {
-                                            let nop = c.as_str().parse::<i32>();
-                                            if !nop.is_err() {
-                                                ret = nop.unwrap();
+                                        for name in names {
+                                            if let Some(c) = caps.name(name) {
+                                                let nop = c.as_str().parse::<i32>();
+                                                if !nop.is_err() {
+                                                    ret = nop.unwrap();
+                                                }
                                             }
                                         }
                                     }
@@ -266,8 +340,9 @@ impl BD {
         } else {
             return Err("No one sbom components".to_string());
         }
-        self.find_bug_bd_one_query(_id).await
+        self.find_bug_bd_one_query(_id, full).await
     }
+
     #[allow(dead_code)]
     async fn upload(&self, components: &Vec<Component>) -> Result<(), String> {
         self.client
