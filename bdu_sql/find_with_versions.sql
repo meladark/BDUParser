@@ -55,4 +55,7 @@ WHERE
                 )
             )
         )
-    );
+    )
+ORDER BY
+    public.sbom_components.name ASC,
+    public.sbom_components.version ASC;

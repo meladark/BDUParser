@@ -85,7 +85,7 @@ impl BD {
             FROM public.sbom_components 
             INNER JOIN public.components 
             ON public.sbom_components.name = public.components.name INNER JOIN public.\"BDU\" ON public.components.id_bdu = public.\"BDU\".id
-            WHERE public.sbom_components.\"SBOM_raw\" = $1;";
+            WHERE public.sbom_components.\"SBOM_raw\" = $1 ORDER BY public.sbom_components.name ASC, public.sbom_components.version ASC;";
         } else {
             query =
                 "SELECT
@@ -145,7 +145,7 @@ impl BD {
                         )
                     )
                 )
-            );";
+            ) ORDER BY public.sbom_components.name ASC, public.sbom_components.version ASC;";
         }
         let row = self.client
             .query(query, &[&id]).await
