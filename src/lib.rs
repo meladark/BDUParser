@@ -1,128 +1,153 @@
-use std::process::Command;
+use std::{ fs::{ self, File }, io::Write, process::{ Command, ExitStatus } };
 
-use serde::{ Deserialize, Serialize };
-use serde_json::Value;
-
-mod bd;
+use bd::Bugs;
+use latex::{ Document, DocumentClass, Element, PreambleElement, Section };
+use log::*;
+pub mod bd;
 mod bdu;
-mod sbom4;
 mod sbom5;
 
-#[allow(non_snake_case)]
-#[derive(Serialize, Deserialize, Debug)]
-struct Bom {
-    //Deprecated
-    bomFormat: String,
-    specVersion: String,
-    serialNumber: String,
-    version: u8,
-}
+#[cfg(test)]
+mod test;
 
-#[allow(dead_code)]
-/// Чтение [Sbom](https://github.com/CycloneDX) как строку и возвращает готовую структуру, либо ошибку.
-fn sbom_read(foo: String) -> Result<sbom5::Root, String> {
-    let t: Value = serde_json::from_str(&foo).expect("Parsing json");
-    if let Some(field) = t.get("specVersion") {
-        if field == "1.5" {
-            let sbom = serde_json::from_str::<sbom5::Root>(&foo).expect("Bad json");
-
-            Ok(sbom)
+/// Сгенерировать ПДФ отчет по полученным багам от `self.find`.
+///
+/// # Arguments
+/// * bugs - Список багов
+/// * name - имя файла сборки
+pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
+    let mut doc = Document::new(DocumentClass::Article);
+    doc.preamble
+        .push(PreambleElement::UsePackage {
+            package: "inputenc".to_string(),
+            argument: Some("utf8".to_string()),
+        })
+        .push(PreambleElement::UsePackage {
+            package: "fontenc".to_string(),
+            argument: Some("T2A".to_string()),
+        })
+        .push(PreambleElement::UsePackage {
+            package: "babel".to_string(),
+            argument: Some("english,russian".to_string()),
+        })
+        .title("Отчет Карги")
+        .author(&*format!("BDUParser v{}", env!("CARGO_PKG_VERSION")))
+        .use_package("amsmath")
+        .use_package("hyperref")
+        .use_package("spverbatim");
+    doc.push(Element::TitlePage);
+    doc.push(Element::ClearPage);
+    doc.push(Element::TableOfContents);
+    doc.push(Element::ClearPage);
+    let mut old_sec = "".to_string();
+    let mut sec = Section::new(&old_sec);
+    for bug in bugs {
+        debug!("{} {}", &bug.component.name, &bug.vuln.id);
+        let now_sec;
+        if let Some(ver) = &bug.component.version {
+            now_sec = format!("{}@{}", &bug.component.name, ver);
         } else {
-            Err(format!("Bad specVersion file. Must be 1.5 at least: {}", field))
+            now_sec = bug.component.name;
         }
-    } else {
-        Err("No specVersion in file".to_string())
-    }
-}
-/// Загрузить [Sbom](https://github.com/CycloneDX)
-pub fn set_sbom(pt: &String) -> Result<sbom5::Root, String> {
-    let output = if cfg!(target_os = "windows") {
-        Command::new("cmd")
-            .args(["/C", "Windows doesn`t support yet"])
-            .output()
-            .expect("failed to execute process");
-        return Err("Windows platform doesn`t support yet".to_string());
-    } else {
-        Command::new("./cyclonedx-linux-x64")
-            .arg("convert")
-            .args(["--input-file", pt, "--output-format", "json", "--output-version", "v1_5"])
-            .output()
-            .expect("failed to execute process")
-    };
-    if output.status.success() {
-        return sbom_read(String::from_utf8(output.stdout).expect("pizdec conver"));
-    } else {
-        return Err(
-            format!(
-                "Convert Error: Message: {} Status: {}",
-                String::from_utf8(output.stdout).expect("pizdec conver"),
-                output.status
+        if now_sec != old_sec {
+            if old_sec != "".to_string() {
+                doc.push(sec);
+            }
+            sec = Section::new(&now_sec);
+            old_sec = now_sec;
+        }
+        sec.push(
+            &*format!(
+                "\\subsection{{\\href{{https://bdu.fstec.ru/vul/{}}}{{{}}}}}",
+                &bug.vuln.id[4..],
+                &bug.vuln.id
             )
         );
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{ fs::{ self, File }, io::{ BufWriter, Write }, path::Path, time::Instant };
-
-    use crate::bd::BD;
-
-    use self::bdu::xlsx_parser;
-
-    use super::*;
-
-    #[test]
-    fn test_read_json() {
-        let all_files = [
-            "extra/bom.json",
-            "extra/bom.1.4.json",
-            "extra/bom (1).json",
-            "extra/bom.1.5.json",
-            "extra/badfile",
-            "extra/vullist.xlsx",
-        ];
-        for file in all_files {
-            println!("File {}", &file);
-            match set_sbom(&file.to_string()) {
-                Ok(_) => println!("Parse Done"),
-                Err(err) => println!("{}", err),
-            };
+        if let Some(name_vuln) = bug.vuln.name_vuln {
+            sec.push(
+                &*format!("\\begin{{spverbatim}}Наименование: {}\\end{{spverbatim}}", &name_vuln)
+            );
         }
-    }
-    #[test]
-    fn test_bdu_parser() {
-        let bdu_components = xlsx_parser(
-            &String::from("extra/vullist.xlsx"),
-            &String::from("Sheet")
-        );
-        if let Some(components) = bdu_components {
-            let file = File::create("bdu.json").expect("File bad");
-            let mut writer = BufWriter::new(file);
-            serde_json::to_writer(&mut writer, &components[47000..48000]).expect("Kall");
-            writer.flush().expect("Pizdec");
-        } else {
-            println!("Обосрался")
+        if let Some(date) = bug.vuln.date {
+            sec.push(&*format!("Дата обнаружения: {}", &date));
         }
-    }
-    #[test]
-    fn test_postgres() {
-        let _ = BD::default().update();
-    }
-    #[test]
-    fn test_find_bug_bd_one_query() {
-        let start = Instant::now();
-        let kek = BD::default().find(
-            &String::from(fs::read_to_string(Path::new("extra/bom.1.5.json")).expect("Bad File"))
-        );
-        let duration = start.elapsed();
-        match kek {
-            Ok(k) =>
-                for i in k {
-                    println!("{} {}", i.component.name, i.vuln.id);
+        if let Some(severity) = bug.vuln.severity {
+            sec.push(&*format!("Уровень опасности: {}", &severity));
+        }
+        if let Some(exploit) = bug.vuln.exploit {
+            sec.push(&*format!("Наличие эксплойта: {}", &exploit));
+        }
+        if let Some(fix) = bug.vuln.fix {
+            sec.push(&*format!("Информация об устранении: {}", &fix));
+        }
+        if let Some(desc_vuln) = bug.vuln.desc_vuln {
+            sec.push(
+                &*format!(
+                    "\\begin{{spverbatim}}Описание уязвимости: {}\\end{{spverbatim}}",
+                    &desc_vuln
+                )
+            );
+        }
+        if let Some(source_sites) = bug.vuln.source_sites {
+            sec.push("Информационные сайты:");
+            if source_sites.len() > 0 {
+                sec.push("\\begin{enumerate}");
+                for ss in source_sites {
+                    sec.push(&*format!("\\item \\url{{{}}}", ss));
                 }
-            Err(err) => println!("Error: {}", err),
+                sec.push("\\end{enumerate}");
+            } else {
+                sec.push("Отстутствуют");
+            }
         }
-        println!("Time elapsed in find_bug_bd_one_query() is: {:?}", duration);
+        if let Some(info) = bug.vuln.info {
+            if info != "" {
+                sec.push(
+                    &*format!(
+                        "\\begin{{spverbatim}}Дополнительная информация: {}\\end{{spverbatim}}",
+                        &info
+                    )
+                );
+            }
+        }
     }
+    doc.push(sec);
+    let binding = latex::print(&doc).expect("print");
+    let rendered = binding.as_bytes();
+    let file_name = format!("{}.tex", name);
+    let mut f = File::create(&file_name).expect("open");
+    let _ = f.write_all(rendered).expect("writer");
+    let exit_status = Command::new("pdflatex").arg(&file_name).status();
+    match exit_status {
+        Ok(es) => {
+            let exit_status = Command::new("pdflatex").arg(&file_name).status();
+            debug!("Latex first code exit: {}", es);
+            match exit_status {
+                Ok(es) => {
+                    let _ = fs::remove_file(file_name);
+                    let _ = fs::remove_file(format!("{}.log", name));
+                    let _ = fs::remove_file(format!("{}.out", name));
+                    let _ = fs::remove_file(format!("{}.toc", name));
+                    let _ = fs::remove_file(format!("{}.aux", name));
+                    if !ExitStatus::success(&es) {
+                        error!("Неудачный код возврата second latex: {}", es);
+                        return Err(format!("Код возврата неудачный: {}", es));
+                    }
+                }
+                Err(e) => {
+                    error!("Error second generate pdf: {}", e);
+                    format!("Error second generate pdf: {}", e).to_string();
+                }
+            }
+            if !ExitStatus::success(&es) {
+                error!("Неудачный код возврата first latex: {}", es);
+                return Err(format!("Код возврата неудачный: {}", es));
+            }
+        }
+        Err(e) => {
+            error!("Error first generate pdf: {}", e);
+            format!("Error first generate pdf: {}", e).to_string();
+        }
+    }
+    Ok(())
 }

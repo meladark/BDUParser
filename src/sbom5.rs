@@ -857,7 +857,7 @@ pub struct Rating {
     /// The source that calculated the severity or risk rating of the vulnerability.
     pub source: Option<Source>,
     /// The numerical score of the rating.
-    pub score: Option<i32>,
+    pub score: Option<f32>,
     /// Textual representation of the severity that corresponds to the numerical score of the rating.
     /// Must be one of: "critical" "high" "medium" "low" "info" "none" "unknown"
     pub severity: Option<String>, //TODO: add enum
