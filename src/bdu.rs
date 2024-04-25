@@ -1,4 +1,3 @@
-use log::debug;
 use log::info;
 use log::trace;
 use serde_derive::Deserialize;
