@@ -530,7 +530,7 @@ pub fn xlsx_parser(pt: &String, sheet_name: &String) -> Option<Vec<Component>> {
                         },
                     },
                 };
-                debug!("Parse component: {}", &com.id);
+                trace!("Parse component: {}", &com.id);
                 trace!("Component: {:?}", &com);
                 com
             });

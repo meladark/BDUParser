@@ -8,4 +8,8 @@ cyclonedx-*
 out
 vull.xlsx
 *.log
-
+*.aux
+*.out
+*.pdf
+*.tex
+*.toc
