@@ -5,7 +5,7 @@ build_env:
 
 build:
 	echo "Build BDU parser"
-	cargo build
+	cargo build --release
 
 test: build
 	echo "Run tests"

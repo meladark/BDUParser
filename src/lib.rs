@@ -47,7 +47,7 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
         if let Some(ver) = &bug.component.version {
             now_sec = format!("{}@{}", &bug.component.name, ver);
         } else {
-            now_sec = bug.component.name;
+            now_sec = bug.component.name.clone();
         }
         if now_sec != old_sec {
             if old_sec != "".to_string() {
@@ -67,6 +67,25 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
             sec.push(
                 &*format!("\\begin{{spverbatim}}Наименование: {}\\end{{spverbatim}}", &name_vuln)
             );
+        }
+        for version in &bug.vuln.versions {
+            if version.name == bug.component.name {
+                if let Some(only) = &version.only {
+                    sec.push(&*format!("Уязвима только версия: {}", only));
+                    continue;
+                }
+                let mut rec = "Уязвима".to_string();
+                if let Some(from) = &version.from {
+                    rec = format!("{} с версии {}", rec, from);
+                }
+                if let Some(to) = &version.to {
+                    rec = format!("{} по версию {}", rec, to);
+                }
+                if version.inclusive {
+                    rec = format!("{} включительно", rec);
+                }
+                sec.push(&*format!("{}", rec));
+            }
         }
         if let Some(date) = bug.vuln.date {
             sec.push(&*format!("Дата обнаружения: {}", &date));
@@ -124,11 +143,13 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
             debug!("Latex first code exit: {}", es);
             match exit_status {
                 Ok(es) => {
-                    let _ = fs::remove_file(file_name);
+                    // let _ = fs::remove_file(file_name);
                     let _ = fs::remove_file(format!("{}.log", name));
                     let _ = fs::remove_file(format!("{}.out", name));
                     let _ = fs::remove_file(format!("{}.toc", name));
                     let _ = fs::remove_file(format!("{}.aux", name));
+                    let _ = fs::remove_file(format!("{}.fls", name));
+                    let _ = fs::remove_file(format!("{}.fdb_latexmk", name));
                     if !ExitStatus::success(&es) {
                         error!("Неудачный код возврата second latex: {}", es);
                         return Err(format!("Код возврата неудачный: {}", es));
@@ -151,3 +172,5 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
     }
     Ok(())
 }
+
+pub fn new_get_pdf(_bugs: Vec<Bugs>) {}
