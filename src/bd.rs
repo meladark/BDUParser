@@ -113,14 +113,14 @@ impl BD {
                     public.sbom_components.version = public.components.only
                     OR (
                         (
-                            public.sbom_components.major >= public.components.from_major
+                            public.sbom_components.major > public.components.from_major
                             OR (
-                                public.sbom_components.major >= public.components.from_major
-                                AND public.sbom_components.minor >= public.components.from_minor
+                                public.sbom_components.major = public.components.from_major
+                                AND public.sbom_components.minor > public.components.from_minor
                             )
                             OR (
-                                public.sbom_components.major >= public.components.from_major
-                                AND public.sbom_components.minor >= public.components.from_minor
+                                public.sbom_components.major = public.components.from_major
+                                AND public.sbom_components.minor = public.components.from_minor
                                 AND public.sbom_components.patch >= public.components.from_patch
                             )
                         )
