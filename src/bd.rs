@@ -258,7 +258,7 @@ impl BD {
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
             debug!("Start sbom converted!");
-            Command::new("cyclonedx-linux-x64") // TODO: change ? ./cyclonedx-linux-x64
+            Command::new("cyclonedx") // TODO: change ? ./cyclonedx-linux-x64
                 .arg("convert")
                 .args(["--input-file", foo, "--output-format", "json", "--output-version", "v1_5"])
                 .output()
