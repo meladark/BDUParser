@@ -287,80 +287,112 @@ impl BD {
             error!("{}", &ret);
             return Err(ret);
         }
-        let mut count = 0;
+
         if let Some(sbom_component) = &sbom.components {
+            let mut count = 0;
             let re = Regex::new(
                 r"(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)|(?<major_2>\d+)\.(?<minor_2>\d+)|(?<major_3>\d+)"
             ).expect("Error regex");
-            for component in sbom_component {
-                let row = self.client
-                    .execute(
-                        "INSERT INTO public.sbom_components (name, version, major, minor, patch, \"SBOM_raw\", \"raw\") VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                        &[
-                            &component.name,
-                            &Some(&component.version),
-                            {
-                                let mut ret = 0_i32;
-                                if let Some(ver) = &component.version {
-                                    let names = ["major", "major_2", "major_3"];
-                                    if let Some(caps) = re.captures(&ver) {
-                                        for name in names {
-                                            if let Some(c) = caps.name(name) {
-                                                let nop = c.as_str().parse::<i32>();
-                                                if !nop.is_err() {
-                                                    ret = nop.unwrap();
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                &Some(ret)
-                            },
-                            {
-                                let mut ret = 0_i32;
-                                if let Some(ver) = &component.version {
-                                    let names = ["minor", "minor_2"];
-                                    if let Some(caps) = re.captures(&ver) {
-                                        for name in names {
-                                            if let Some(c) = caps.name(name) {
-                                                let nop = c.as_str().parse::<i32>();
-                                                if !nop.is_err() {
-                                                    ret = nop.unwrap();
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                &Some(ret)
-                            },
-                            {
-                                let mut ret = 0_i32;
-                                if let Some(ver) = &component.version {
-                                    if let Some(caps) = re.captures(&ver) {
-                                        if let Some(c) = caps.name("patch") {
-                                            let nop = c.as_str().parse::<i32>();
-                                            if !nop.is_err() {
-                                                ret = nop.unwrap();
-                                            }
-                                        }
-                                    }
-                                }
-                                &Some(ret)
-                            },
-                            &_id,
-                            &json!(&component),
-                        ]
-                    ).await
-                    .expect("Error INSERT INTO public.sbom_components");
-                if row > 0 {
+            let mut rows = Vec::new();
+            count = self.find_components_recursive(sbom_component, &re, &_id, &mut rows);
+            for (name, version, major, minor, patch, sbom_id, raw_json) in rows {
+                if
+                    self.client
+                        .execute(
+                            "INSERT INTO public.sbom_components (name, version, major, minor, patch, \"SBOM_raw\", \"raw\") VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (name, version, \"SBOM_raw\") DO NOTHING",
+                            &[
+                                &name,
+                                &version,
+                                &Some(major),
+                                &Some(minor),
+                                &Some(patch),
+                                &sbom_id,
+                                &raw_json,
+                            ]
+                        ).await
+                        .expect("Error INSERT INTO public.sbom_components") > 0
+                {
                     count += 1;
                 }
             }
-            println!("[Info] Add {}/{} sbom components.", count, sbom_component.len());
+            info!("[Info] Add {}/{} sbom components.", count, sbom_component.len());
         } else {
             return Err("No one sbom components".to_string());
         }
         self.find_bug_bd_one_query(_id, full).await
+    }
+
+    fn find_components_recursive<'a>(
+        &'a self,
+        components: &'a Vec<sbom5::Component>,
+        re: &Regex,
+        _id: &'a i32,
+        out: &mut Vec<(&'a str, Option<&'a String>, i32, i32, i32, i32, serde_json::Value)>
+    ) -> i32 {
+        let mut count = 0;
+        for component in components {
+            let major = {
+                let mut ret = 0_i32;
+                if let Some(ver) = &component.version {
+                    let names = ["major", "major_2", "major_3"];
+                    if let Some(caps) = re.captures(&ver) {
+                        for name in names {
+                            if let Some(c) = caps.name(name) {
+                                let nop = c.as_str().parse::<i32>();
+                                if !nop.is_err() {
+                                    ret = nop.unwrap();
+                                }
+                            }
+                        }
+                    }
+                }
+                ret
+            };
+            let minor = {
+                let mut ret = 0_i32;
+                if let Some(ver) = &component.version {
+                    let names = ["minor", "minor_2"];
+                    if let Some(caps) = re.captures(&ver) {
+                        for name in names {
+                            if let Some(c) = caps.name(name) {
+                                let nop = c.as_str().parse::<i32>();
+                                if !nop.is_err() {
+                                    ret = nop.unwrap();
+                                }
+                            }
+                        }
+                    }
+                }
+                ret
+            };
+            let ver = {
+                let mut ret = 0_i32;
+                if let Some(ver) = &component.version {
+                    if let Some(caps) = re.captures(&ver) {
+                        if let Some(c) = caps.name("patch") {
+                            let nop = c.as_str().parse::<i32>();
+                            if !nop.is_err() {
+                                ret = nop.unwrap();
+                            }
+                        }
+                    }
+                }
+                ret
+            };
+            out.push((
+                &component.name,
+                component.version.as_ref(),
+                major,
+                minor,
+                ver,
+                *_id,
+                json!(component),
+            ));
+            if let Some(c) = &component.components {
+                count += self.find_components_recursive(&c, re, _id, out);
+            }
+        }
+        count
     }
 
     #[allow(dead_code)]
@@ -479,7 +511,8 @@ impl BD {
                     patch integer,
                     \"SBOM_raw\" integer,
                     \"raw\" json,
-                    PRIMARY KEY (id)
+                    PRIMARY KEY (id),
+                    CONSTRAINT unique_component_key UNIQUE (name, version, \"SBOM_raw\")
                 );
                 
                 ALTER TABLE IF EXISTS public.sbom_components

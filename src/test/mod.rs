@@ -22,10 +22,20 @@ mod test {
         info!("Start test_find_bug_bd_one_query!!!!!");
         let start = Instant::now();
         let t = BD::default().await.expect("Error connect");
-        match t.find(&"extra/bom.1.5.json".to_string(), false).await {
+        match t.find(&"extra/cleaned_data.json".to_string(), false).await {
             Ok(k) =>
                 for i in k {
-                    println!("{} {}", i.component.name, i.vuln.id);
+                    println!(
+                        "{}@{} {}",
+                        i.component.name,
+                        match i.component.version {
+                            Some(v) => v,
+                            None => {
+                                "None".to_string()
+                            }
+                        },
+                        i.vuln.id
+                    );
                 }
             Err(err) => println!("[Error] {}", err),
         }
@@ -36,7 +46,7 @@ mod test {
     #[tokio::test]
     async fn test_latex() {
         let t = BD::default().await.expect("Error connect");
-        match t.find(&"extra/bom.1.5.json".to_string(), false).await {
+        match t.find(&"extra/cleaned_data.json".to_string(), true).await {
             Ok(bugs) => {
                 match get_pdf(bugs, &"test".to_string()) {
                     Ok(_) => println!("Well done"),
@@ -47,7 +57,5 @@ mod test {
         }
     }
     #[tokio::test]
-    async fn test_typst(){
-
-    }
+    async fn test_typst() {}
 }
