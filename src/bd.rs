@@ -234,6 +234,7 @@ impl BD {
             return Err(res);
         }
     }
+    
     #[allow(dead_code)]
     /// Поиск уязвимостей в sbom файле.
     /// Работает только на Linux. Для работы требуется cyclonedx-linux-x64 в системе для работы.
@@ -257,6 +258,7 @@ impl BD {
                 .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
+            process_file(foo).expect("Ошибка удаления лишних хэшей");
             debug!("Start sbom converted!");
             Command::new("cyclonedx") // TODO: change ? ./cyclonedx-linux-x64
                 .arg("convert")
@@ -819,4 +821,40 @@ impl BD {
         info!("Add {}/{} BDU.", counter, components.len());
         Ok(())
     }
+}
+
+use serde_json::Value;
+use std::error::Error;
+
+fn remove_hashes_fields(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            map.remove("hashes");
+            for v in map.values_mut() {
+                remove_hashes_fields(v);
+            }
+        },
+        Value::Array(arr) => {
+            for v in arr {
+                remove_hashes_fields(v);
+            }
+        },
+        _ => {}
+    }
+}
+
+fn process_file(full_path: &str) -> Result<(), Box<dyn Error>> {
+    // Читаем файл как строку
+    let content = fs::read_to_string(full_path)?;
+
+    // Пытаемся распарсить как JSON
+    let mut json_value: Value = serde_json::from_str(&content)?;
+
+    // Удаляем все поля "hashes"
+    remove_hashes_fields(&mut json_value);
+
+    // Записываем обратно в файл (если нужно)
+    fs::write(full_path, serde_json::to_string_pretty(&json_value)?)?;
+
+    Ok(())
 }
