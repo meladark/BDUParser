@@ -234,7 +234,7 @@ impl BD {
             return Err(res);
         }
     }
-    
+
     #[allow(dead_code)]
     /// Поиск уязвимостей в sbom файле.
     /// Работает только на Linux. Для работы требуется cyclonedx-linux-x64 в системе для работы.
@@ -258,7 +258,12 @@ impl BD {
                 .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
-            process_file(foo).expect("Ошибка удаления лишних хэшей");
+            match process_file(foo) {
+                Ok(()) => info!("Очищение прошло удачно"),
+                Err(_) => {
+                    return Err("Не удалось подчистить json.".to_string());
+                }
+            }
             debug!("Start sbom converted!");
             Command::new("cyclonedx") // TODO: change ? ./cyclonedx-linux-x64
                 .arg("convert")
@@ -296,12 +301,15 @@ impl BD {
                 r"(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)|(?<major_2>\d+)\.(?<minor_2>\d+)|(?<major_3>\d+)"
             ).expect("Error regex");
             let mut rows = Vec::new();
-            count = self.find_components_recursive(sbom_component, &re, &_id, &mut rows);
+            self.find_components_recursive(sbom_component, &re, &_id, &mut rows);
             for (name, version, major, minor, patch, sbom_id, raw_json) in rows {
                 if
-                    self.client
-                        .execute(
-                            "INSERT INTO public.sbom_components (name, version, major, minor, patch, \"SBOM_raw\", \"raw\") VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (name, version, \"SBOM_raw\") DO NOTHING",
+                    let Some(_) = self.client
+                        .query_opt(
+                            "INSERT INTO public.sbom_components (name, version, major, minor, patch, \"SBOM_raw\", \"raw\")
+                                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                                        ON CONFLICT (name, version, \"SBOM_raw\") DO NOTHING
+                                        RETURNING id",
                             &[
                                 &name,
                                 &version,
@@ -312,8 +320,9 @@ impl BD {
                                 &raw_json,
                             ]
                         ).await
-                        .expect("Error INSERT INTO public.sbom_components") > 0
+                        .expect("Error INSERT INTO public.sbom_components")
                 {
+                    // let id: i32 = row.get(0);
                     count += 1;
                 }
             }
@@ -833,28 +842,20 @@ fn remove_hashes_fields(value: &mut Value) {
             for v in map.values_mut() {
                 remove_hashes_fields(v);
             }
-        },
+        }
         Value::Array(arr) => {
             for v in arr {
                 remove_hashes_fields(v);
             }
-        },
+        }
         _ => {}
     }
 }
 
 fn process_file(full_path: &str) -> Result<(), Box<dyn Error>> {
-    // Читаем файл как строку
     let content = fs::read_to_string(full_path)?;
-
-    // Пытаемся распарсить как JSON
     let mut json_value: Value = serde_json::from_str(&content)?;
-
-    // Удаляем все поля "hashes"
     remove_hashes_fields(&mut json_value);
-
-    // Записываем обратно в файл (если нужно)
     fs::write(full_path, serde_json::to_string_pretty(&json_value)?)?;
-
     Ok(())
 }

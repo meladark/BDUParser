@@ -30,9 +30,32 @@ mod test {
                         i.component.name,
                         match i.component.version {
                             Some(v) => v,
-                            None => {
-                                "None".to_string()
-                            }
+                            None => { "None".to_string() }
+                        },
+                        i.vuln.id
+                    );
+                }
+            Err(err) => println!("[Error] {}", err),
+        }
+        let duration = start.elapsed();
+        println!("Time elapsed in find_bug_bd_one_query() is: {:?}", duration);
+    }
+
+    #[tokio::test]
+    async fn test_no_valid() {
+        env_logger::init();
+        info!("Start no valid json!!!!!");
+        let start = Instant::now();
+        let t = BD::default().await.expect("Error connect");
+        match t.find(&"extra/no_valid.json".to_string(), false).await {
+            Ok(k) =>
+                for i in k {
+                    println!(
+                        "{}@{} {}",
+                        i.component.name,
+                        match i.component.version {
+                            Some(v) => v,
+                            None => { "None".to_string() }
                         },
                         i.vuln.id
                     );
