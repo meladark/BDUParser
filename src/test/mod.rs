@@ -22,6 +22,21 @@ mod test {
         info!("Start test_find_bug_bd_one_query!!!!!");
         let start = Instant::now();
         let t = BD::default().await.expect("Error connect");
+        match t.find(&"extra/golang.json".to_string(), false).await {
+            Ok(k) =>
+                for i in k {
+                    println!(
+                        "{}@{} {}",
+                        i.component.name,
+                        match i.component.version {
+                            Some(v) => v,
+                            None => { "None".to_string() }
+                        },
+                        i.vuln.id
+                    );
+                }
+            Err(err) => println!("[Error] {}", err),
+        }
         match t.find(&"extra/cleaned_data.json".to_string(), false).await {
             Ok(k) =>
                 for i in k {

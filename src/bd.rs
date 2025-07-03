@@ -7,6 +7,14 @@ use regex::Regex;
 use serde_json::json;
 use log::{ debug, error, info, trace };
 use tokio_postgres::NoTls;
+use serde_json::Value;
+use std::error::Error;
+
+#[derive(Debug)]
+pub enum FileProcessResult {
+    JsonProcessed,
+    XmlDetected,
+}
 
 #[derive(Debug)]
 pub struct Bugs {
@@ -259,9 +267,10 @@ impl BD {
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
             match process_file(foo) {
-                Ok(()) => info!("Очищение прошло удачно"),
-                Err(_) => {
-                    return Err("Не удалось подчистить json.".to_string());
+                Ok(FileProcessResult::JsonProcessed) => info!("Очищение прошло удачно."),
+                Ok(FileProcessResult::XmlDetected) => info!("XML не чистится."),
+                Err(e) => {
+                    return Err(format!("Не удалось подчистить json: {}", e));
                 }
             }
             debug!("Start sbom converted!");
@@ -302,6 +311,7 @@ impl BD {
             ).expect("Error regex");
             let mut rows = Vec::new();
             self.find_components_recursive(sbom_component, &re, &_id, &mut rows);
+            let len = rows.len();
             for (name, version, major, minor, patch, sbom_id, raw_json) in rows {
                 if
                     let Some(_) = self.client
@@ -326,7 +336,7 @@ impl BD {
                     count += 1;
                 }
             }
-            info!("[Info] Add {}/{} sbom components.", count, sbom_component.len());
+            info!("Add {}/{} sbom components.", count, len);
         } else {
             return Err("No one sbom components".to_string());
         }
@@ -391,7 +401,7 @@ impl BD {
                 ret
             };
             out.push((
-                &component.name,
+                extract_component_name(&component.name),
                 component.version.as_ref(),
                 major,
                 minor,
@@ -832,9 +842,6 @@ impl BD {
     }
 }
 
-use serde_json::Value;
-use std::error::Error;
-
 fn remove_hashes_fields(value: &mut Value) {
     match value {
         Value::Object(map) => {
@@ -852,10 +859,38 @@ fn remove_hashes_fields(value: &mut Value) {
     }
 }
 
-fn process_file(full_path: &str) -> Result<(), Box<dyn Error>> {
+pub fn process_file(full_path: &str) -> Result<FileProcessResult, Box<dyn Error>> {
     let content = fs::read_to_string(full_path)?;
-    let mut json_value: Value = serde_json::from_str(&content)?;
+    if content.trim_start().starts_with("<?xml") {
+        return Ok(FileProcessResult::XmlDetected);
+    }
+    let mut json_value: Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(Box::new(e));
+        }
+    };
     remove_hashes_fields(&mut json_value);
     fs::write(full_path, serde_json::to_string_pretty(&json_value)?)?;
-    Ok(())
+    Ok(FileProcessResult::JsonProcessed)
+}
+
+fn is_version(s: &str) -> bool {
+    s.len() > 1 && s.starts_with('v') && s[1..].chars().all(|c| c.is_ascii_digit())
+}
+
+fn extract_component_name(name: &str) -> &str {
+    if !name.contains('/') {
+        // ХЗ как иначе определить пает ли это голанга
+        return name;
+    }
+    let parts: Vec<&str> = name.split('/').collect();
+    if parts.is_empty() {
+        return name;
+    }
+    let last_part = parts.last().unwrap();
+    if is_version(last_part) && parts.len() >= 2 {
+        return parts[parts.len() - 2];
+    }
+    last_part
 }
