@@ -91,7 +91,7 @@ pub struct Platform {
 }
 
 #[allow(dead_code)]
-pub fn xlsx_parser(pt: PathBuf, sheet_name: &String) -> Option<Vec<Component>> {
+pub fn xlsx_parser(pt: &PathBuf, sheet_name: &String) -> Option<Vec<Component>> {
     info!("Start Parsing xlsx BDU");
     let mut workbook: Xlsx<_> = open_workbook(pt).expect("Cannot open file");
     let result = workbook.worksheet_range(sheet_name);
