@@ -11,7 +11,7 @@ test: build
 	echo "Run tests"
 	docker-compose up -d
 	RUST_LOG=debug cargo test test_postgres --verbose
-	RUST_LOG=debug cargo test --package bdu_parser --lib -- tests --nocapture
+	RUST_LOG=debug cargo test --package bdu_parser --lib -- tests
 	docker-compose stop
 
 clean:

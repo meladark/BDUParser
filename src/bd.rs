@@ -7,6 +7,7 @@ use regex::Regex;
 use serde_json::json;
 use log::{ debug, error, info, trace };
 use tokio_postgres::NoTls;
+use tempdir::TempDir;
 
 #[derive(Debug)]
 pub struct Bugs {
@@ -196,6 +197,10 @@ impl BD {
     /// Необходимо чтобы в системе стоял *wget*.
     /// Не поддерживается Windows
     pub async fn update(&self) -> Result<(), String> {
+        let tmp_dir = TempDir::new("BDUParser").expect("Не могу создать временную папку");
+        let path = tmp_dir.path();
+        info!("Temporary directory created at: {:?}", path);
+        let file_path = path.join("vull.xlsx");
         let output = if cfg!(target_os = "windows") {
             error!("Carga doesn`t support windows yet!");
             Command::new("cmd")
@@ -209,12 +214,13 @@ impl BD {
                 .arg("--no-check-certificate")
                 .arg("https://bdu.fstec.ru/files/documents/vullist.xlsx")
                 .arg("-O")
-                .arg("vull.xlsx")
+                .arg(&file_path)
                 .output()
                 .expect("failed to execute process")
         };
         if output.status.success() {
-            let bdu_components = xlsx_parser(&String::from("vull.xlsx"), &String::from("Sheet"));
+            let bdu_components = xlsx_parser(file_path, &String::from("Уязвимости"));
+            let _ = tmp_dir.close();
             trace!("Deleting vull.xlsx");
             fs::remove_file("vull.xlsx").expect("Error delete vull.xlsx");
             trace!("Deleted vull.xlsx");
@@ -225,6 +231,7 @@ impl BD {
                 return Err("Faild to parse xlsx BDU".to_string());
             }
         } else {
+            let _ = tmp_dir.close();
             let res = format!(
                 "Get BDU database error: Message: {} Status: {}",
                 String::from_utf8(output.stdout).expect("pizdec conver"),

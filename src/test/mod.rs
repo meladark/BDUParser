@@ -9,7 +9,8 @@ mod test {
     async fn test_postgres() {
         env_logger::init();
         info!("Start test_postgres!!!!!");
-        let t = BD::default().await.expect("Error default");
+        //let t = BD::default().await.expect("Error default");
+        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect("Error New");
         info!("Start updating DataBase.");
         match t.update().await {
             Ok(_) => println!("Well done"),
@@ -21,7 +22,8 @@ mod test {
         env_logger::init();
         info!("Start test_find_bug_bd_one_query!!!!!");
         let start = Instant::now();
-        let t = BD::default().await.expect("Error connect");
+        // let t = BD::default().await.expect("Error connect");
+        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect("Error New");
         match t.find(&"extra/cleaned_data.json".to_string(), false).await {
             Ok(k) =>
                 for i in k {
@@ -30,9 +32,33 @@ mod test {
                         i.component.name,
                         match i.component.version {
                             Some(v) => v,
-                            None => {
-                                "None".to_string()
-                            }
+                            None => { "None".to_string() }
+                        },
+                        i.vuln.id
+                    );
+                }
+            Err(err) => println!("[Error] {}", err),
+        }
+        let duration = start.elapsed();
+        println!("Time elapsed in find_bug_bd_one_query() is: {:?}", duration);
+    }
+
+    #[tokio::test]
+    async fn test_no_valid() {
+        env_logger::init();
+        info!("Start no valid json!!!!!");
+        let start = Instant::now();
+        // let t = BD::default().await.expect("Error connect");
+        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect("Error New");
+        match t.find(&"extra/no_valid.json".to_string(), false).await {
+            Ok(k) =>
+                for i in k {
+                    println!(
+                        "{}@{} {}",
+                        i.component.name,
+                        match i.component.version {
+                            Some(v) => v,
+                            None => { "None".to_string() }
                         },
                         i.vuln.id
                     );
@@ -45,7 +71,8 @@ mod test {
 
     #[tokio::test]
     async fn test_latex() {
-        let t = BD::default().await.expect("Error connect");
+        //let t = BD::default().await.expect("Error connect");
+        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect("Error New");
         match t.find(&"extra/cleaned_data.json".to_string(), true).await {
             Ok(bugs) => {
                 match get_pdf(bugs, &"test".to_string()) {
