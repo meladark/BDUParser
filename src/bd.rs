@@ -219,11 +219,11 @@ impl BD {
                 .expect("failed to execute process")
         };
         if output.status.success() {
-            let bdu_components = xlsx_parser(file_path, &String::from("Уязвимости"));
+            let bdu_components = xlsx_parser(&file_path, &String::from("Уязвимости"));
             let _ = tmp_dir.close();
-            trace!("Deleting vull.xlsx");
-            fs::remove_file("vull.xlsx").expect("Error delete vull.xlsx");
-            trace!("Deleted vull.xlsx");
+            // debug!("Deleting vull.xlsx");
+            // fs::remove_file(&file_path).unwrap_or_else(|e| panic!("Error delete {:?}: {}", file_path, e));
+            // debug!("Deleted vull.xlsx");
             if let Some(components) = bdu_components {
                 return self.upload(&components).await;
             } else {
