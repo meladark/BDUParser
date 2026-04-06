@@ -3,6 +3,7 @@ use std::{ fs::{ self, File }, io::Write, process::{ Command, ExitStatus } };
 use bd::Bugs;
 use latex::{ Document, DocumentClass, Element, PreambleElement, Section };
 use log::*;
+use rust_xlsxwriter::Workbook;
 pub mod bd;
 mod bdu;
 mod sbom5;
@@ -170,6 +171,106 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
             format!("Error first generate pdf: {}", e).to_string();
         }
     }
+    Ok(())
+}
+
+/// Сгенерировать Excel отчет по полученным багам от `self.find`.
+/// 
+/// # Arguments
+/// * bugs - Список багов
+/// * name - имя файла сборки
+pub fn get_excel(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
+    let mut workbook = Workbook::new();
+    let worksheet = workbook.add_worksheet();
+
+    worksheet.set_name("Report").map_err(|e| e.to_string())?;
+
+    let headers = [
+        "Компонент",
+        "Версия компонента",
+        "Идентификатор уязвимости",
+        "Наименование уязвимости",
+        "Уязвимые версии",
+        "Дата обнаружения",
+        "Уровень опасности",
+        "Наличие эксплойта",
+        "Информация об устранении",
+        "Описание уязвимости",
+        "Информационные сайты",
+        "Дополнительная информация",
+    ];
+
+    for (col, header) in headers.iter().enumerate() {
+        worksheet
+            .write_string(0, col as u16, *header)
+            .map_err(|e| e.to_string())?;
+    }
+
+    for (idx, bug) in bugs.iter().enumerate() {
+        let row = (idx + 1) as u32;
+        let vulnerable_versions = bug.vuln.versions
+            .iter()
+            .filter(|version| version.name == bug.component.name)
+            .map(|version| {
+                if let Some(only) = &version.only {
+                    return format!("Только {}", only);
+                }
+
+                let mut record = String::from("Уязвима");
+                if let Some(from) = &version.from {
+                    record = format!("{} с версии {}", record, from);
+                }
+                if let Some(to) = &version.to {
+                    record = format!("{} по версию {}", record, to);
+                }
+                if version.inclusive {
+                    record = format!("{} включительно", record);
+                }
+                record
+            })
+            .collect::<Vec<String>>()
+            .join("; ");
+        let source_sites = bug.vuln.source_sites.clone().unwrap_or_default().join("\n");
+
+        worksheet
+            .write_string(row, 0, &bug.component.name)
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 1, bug.component.version.as_deref().unwrap_or(""))
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 2, &bug.vuln.id)
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 3, bug.vuln.name_vuln.as_deref().unwrap_or(""))
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 4, &vulnerable_versions)
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 5, bug.vuln.date.as_deref().unwrap_or(""))
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 6, bug.vuln.severity.as_deref().unwrap_or(""))
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 7, bug.vuln.exploit.as_deref().unwrap_or(""))
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 8, bug.vuln.fix.as_deref().unwrap_or(""))
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 9, bug.vuln.desc_vuln.as_deref().unwrap_or(""))
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 10, &source_sites)
+            .map_err(|e| e.to_string())?;
+        worksheet
+            .write_string(row, 11, bug.vuln.info.as_deref().unwrap_or(""))
+            .map_err(|e| e.to_string())?;
+    }
+
+    workbook.save(format!("{}.xlsx", name)).map_err(|e| e.to_string())?;
     Ok(())
 }
 
