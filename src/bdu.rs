@@ -1,13 +1,12 @@
-use log::info;
-use log::trace;
 use log::error;
+use log::info;
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 
-use std::path::PathBuf;
 use regex::Regex;
+use std::path::PathBuf;
 
-use calamine::{ open_workbook, Reader, Xlsx };
+use calamine::{open_workbook, Reader, Xlsx};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -92,8 +91,14 @@ pub struct Platform {
 
 #[allow(dead_code)]
 pub fn xlsx_parser(pt: &PathBuf, sheet_name: &String) -> Option<Vec<Component>> {
-    info!("Start Parsing xlsx BDU");
-    let mut workbook: Xlsx<_> = open_workbook(pt).expect("Cannot open file");
+    info!("Parsing BDU XLSX sheet '{}' from {:?}", sheet_name, pt);
+    let mut workbook: Xlsx<_> = match open_workbook(pt) {
+        Ok(workbook) => workbook,
+        Err(error) => {
+            error!("Failed to open BDU XLSX file {:?}: {:?}", pt, error);
+            return None;
+        }
+    };
     let result = workbook.worksheet_range(sheet_name);
     match result {
         Ok(range) => {
@@ -575,17 +580,21 @@ pub fn xlsx_parser(pt: &PathBuf, sheet_name: &String) -> Option<Vec<Component>> 
                             },
                         },
                     };
-                    trace!("Parse component: {}", &com.id);
-                    trace!("Component: {:?}", &com);
                     com
                 });
             }
-            info!("Load {} BDU components.", bdu_components.len());
+            info!(
+                "Parsed {} BDU components from sheet '{}'",
+                bdu_components.len(),
+                sheet_name
+            );
             Some(bdu_components)
         }
         Err(xlsx_error) => {
-            // print error
-            error!("Error parsing xlsx file: {:?}", xlsx_error);
+            error!(
+                "Failed to read sheet '{}' from {:?}: {:?}",
+                sheet_name, pt, xlsx_error
+            );
             None
         }
     }

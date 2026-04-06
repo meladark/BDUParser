@@ -17,6 +17,7 @@ mod test;
 /// * bugs - Список багов
 /// * name - имя файла сборки
 pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
+    info!("Generating PDF report {}.pdf with {} vulnerabilities", name, bugs.len());
     let mut doc = Document::new(DocumentClass::Article);
     doc.preamble
         .push(PreambleElement::UsePackage {
@@ -43,7 +44,6 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
     let mut old_sec = "".to_string();
     let mut sec = Section::new(&old_sec);
     for bug in bugs {
-        debug!("{} {}", &bug.component.name, &bug.vuln.id);
         let now_sec;
         if let Some(ver) = &bug.component.version {
             now_sec = format!("{}@{}", &bug.component.name, ver);
@@ -141,7 +141,7 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
     match exit_status {
         Ok(es) => {
             let exit_status = Command::new("pdflatex").arg(&file_name).status();
-            debug!("Latex first code exit: {}", es);
+            debug!("First pdflatex exit status for {}: {}", file_name, es);
             match exit_status {
                 Ok(es) => {
                     // let _ = fs::remove_file(file_name);
@@ -152,25 +152,26 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
                     let _ = fs::remove_file(format!("{}.fls", name));
                     let _ = fs::remove_file(format!("{}.fdb_latexmk", name));
                     if !ExitStatus::success(&es) {
-                        error!("Неудачный код возврата second latex: {}", es);
+                        error!("Second pdflatex execution failed for {}: {}", file_name, es);
                         return Err(format!("Код возврата неудачный: {}", es));
                     }
                 }
                 Err(e) => {
-                    error!("Error second generate pdf: {}", e);
-                    format!("Error second generate pdf: {}", e).to_string();
+                    error!("Second pdflatex execution failed for {}: {}", file_name, e);
+                    return Err(format!("Error second generate pdf: {}", e));
                 }
             }
             if !ExitStatus::success(&es) {
-                error!("Неудачный код возврата first latex: {}", es);
+                error!("First pdflatex execution failed for {}: {}", file_name, es);
                 return Err(format!("Код возврата неудачный: {}", es));
             }
         }
         Err(e) => {
-            error!("Error first generate pdf: {}", e);
-            format!("Error first generate pdf: {}", e).to_string();
+            error!("Failed to start first pdflatex execution for {}: {}", file_name, e);
+            return Err(format!("Error first generate pdf: {}", e));
         }
     }
+    info!("Generated PDF report {}.pdf", name);
     Ok(())
 }
 
@@ -180,6 +181,7 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
 /// * bugs - Список багов
 /// * name - имя файла сборки
 pub fn get_excel(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
+    info!("Generating Excel report {}.xlsx with {} vulnerabilities", name, bugs.len());
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();
 
@@ -271,6 +273,7 @@ pub fn get_excel(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
     }
 
     workbook.save(format!("{}.xlsx", name)).map_err(|e| e.to_string())?;
+    info!("Generated Excel report {}.xlsx", name);
     Ok(())
 }
 

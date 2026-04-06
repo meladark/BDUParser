@@ -5,11 +5,11 @@ use crate::{ bdu::{ self, xlsx_parser, Component }, sbom5 };
 use postgres::types::Json;
 use regex::Regex;
 use serde_json::json;
-use log::{ debug, error, info, trace };
+use log::{ debug, error, info };
 use tokio_postgres::NoTls;
 use tempdir::TempDir;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Bugs {
     pub component: sbom5::Component,
     pub vuln: bdu::Component,
@@ -32,12 +32,12 @@ impl BD {
     ///
     /// Пример для урла - *postgresql://bdu:bdu@localhost:5433/bdu*
     pub async fn new(postgres_url: &String) -> Result<Self, String> {
-        info!("Start new connection on {}", postgres_url);
+        info!("Opening PostgreSQL connection");
         match tokio_postgres::connect(&postgres_url, NoTls).await {
             Ok((_client, _connection)) => {
                 tokio::spawn(async move {
                     if let Err(e) = _connection.await {
-                        error!("Connection async move error: {}", e);
+                        error!("PostgreSQL connection task failed: {}", e);
                     }
                 });
                 Ok(Self {
@@ -45,7 +45,7 @@ impl BD {
                 })
             }
             Err(err) => {
-                error!("Error connect: {}", err);
+                error!("Failed to open PostgreSQL connection: {}", err);
                 Err(format!("Error connect: {}", err))
             }
         }
@@ -53,7 +53,7 @@ impl BD {
     /// Создание нового default подключения.
     /// Стандартное подключение - *postgresql://bdu:bdu@localhost:5433/bdu*
     pub async fn default() -> Result<Self, String> {
-        info!("Start default connection");
+        info!("Opening default PostgreSQL connection");
         match
             tokio_postgres::connect(
                 &"postgresql://bdu:bdu@localhost:5433/bdu".to_string(),
@@ -63,7 +63,7 @@ impl BD {
             Ok((_client, _connection)) => {
                 tokio::spawn(async move {
                     if let Err(e) = _connection.await {
-                        error!("Connection error: {}", e);
+                        error!("Default PostgreSQL connection task failed: {}", e);
                     }
                 });
                 Ok(Self {
@@ -71,14 +71,14 @@ impl BD {
                 })
             }
             Err(err) => {
-                error!("Error connect: {}", err);
+                error!("Failed to open default PostgreSQL connection: {}", err);
                 Err(format!("Error connect: {}", err))
             }
         }
     }
 
     async fn find_bug_bd_one_query(&self, id: i32, full: bool) -> Result<Vec<Bugs>, String> {
-        info!("Start findings bugs!");
+        debug!("Searching vulnerabilities for SBOM id {} (full_match={})", id, full);
         let query;
         if full {
             query =
@@ -181,14 +181,7 @@ impl BD {
                 vuln: v,
             });
         }
-        info!("Found {} bugs!", bugs.len());
-        if bugs.len() > 0 {
-            for bug in &bugs {
-                trace!("Bugs: {:?}", &bug);
-            }
-        } else {
-            trace!("Bugs not found =(");
-        }
+        info!("Found {} vulnerabilities for SBOM id {}", bugs.len(), id);
         Ok(bugs)
     }
 
@@ -197,19 +190,20 @@ impl BD {
     /// Необходимо чтобы в системе стоял *wget*.
     /// Не поддерживается Windows
     pub async fn update(&self) -> Result<(), String> {
+        info!("Starting BDU dataset refresh");
         let tmp_dir = TempDir::new("BDUParser").expect("Не могу создать временную папку");
         let path = tmp_dir.path();
-        info!("Temporary directory created at: {:?}", path);
+        debug!("Using temporary directory for BDU refresh: {:?}", path);
         let file_path = path.join("vull.xlsx");
         let output = if cfg!(target_os = "windows") {
-            error!("Carga doesn`t support windows yet!");
+            error!("BDU refresh is not supported on Windows");
             Command::new("cmd")
                 .args(["/C", "Windows doesn`t support yet"])
                 .output()
                 .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
-            debug!("Start load BDU xlsx");
+            info!("Downloading BDU XLSX dataset");
             Command::new("wget")
                 .arg("--no-check-certificate")
                 .arg("https://bdu.fstec.ru/files/documents/vullist.xlsx")
@@ -221,21 +215,19 @@ impl BD {
         if output.status.success() {
             let bdu_components = xlsx_parser(&file_path, &String::from("Уязвимости"));
             let _ = tmp_dir.close();
-            // debug!("Deleting vull.xlsx");
-            // fs::remove_file(&file_path).unwrap_or_else(|e| panic!("Error delete {:?}: {}", file_path, e));
-            // debug!("Deleted vull.xlsx");
             if let Some(components) = bdu_components {
+                info!("Parsed {} BDU records from XLSX dataset", components.len());
                 return self.upload(&components).await;
             } else {
-                error!("Faild to parse xlsx BDU");
+                error!("Failed to parse downloaded BDU XLSX dataset");
                 return Err("Faild to parse xlsx BDU".to_string());
             }
         } else {
             let _ = tmp_dir.close();
             let res = format!(
-                "Get BDU database error: Message: {} Status: {}",
-                String::from_utf8(output.stdout).expect("pizdec conver"),
+                "Get BDU database error: Status: {} Stderr: {}",
                 output.status
+                ,String::from_utf8_lossy(&output.stderr)
             );
             error!("{}", &res);
             return Err(res);
@@ -257,16 +249,21 @@ impl BD {
     ///
     /// Хранить ли сырой пришедший файл?
     pub async fn find(&self, foo: &String, full: bool) -> Result<Vec<Bugs>, String> {
+        info!("Starting SBOM analysis for {}", foo);
         let output = if cfg!(target_os = "windows") {
-            error!("Carga doesn`t support windows.");
+            error!("SBOM analysis is not supported on Windows");
             Command::new("cmd")
                 .args(["/C", "Windows doesn`t support yet"])
                 .output()
                 .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
-            process_file(foo).expect("Ошибка удаления лишних хэшей");
-            debug!("Start sbom converted!");
+            process_file(foo).map_err(|e| {
+                let message = format!("Failed to normalize SBOM file {}: {}", foo, e);
+                error!("{}", message);
+                message
+            })?;
+            debug!("Converting SBOM {} to CycloneDX 1.5 JSON", foo);
             Command::new("cyclonedx") // TODO: change ? ./cyclonedx-linux-x64
                 .arg("convert")
                 .args(["--input-file", foo, "--output-format", "json", "--output-version", "v1_5"])
@@ -289,21 +286,22 @@ impl BD {
             sbom = serde_json::from_str::<sbom5::Root>(&cin).expect("Bad json");
         } else {
             let ret = format!(
-                "Convert Error: Message: {} Status: {}",
-                String::from_utf8(output.stdout).expect("pizdec conver"),
+                "Convert error for {}: Status: {} Stderr: {}",
+                foo,
                 output.status
+                ,String::from_utf8_lossy(&output.stderr)
             );
             error!("{}", &ret);
             return Err(ret);
         }
 
         if let Some(sbom_component) = &sbom.components {
-            let mut count = 0;
+            debug!("SBOM {} contains {} top-level components", foo, sbom_component.len());
             let re = Regex::new(
                 r"(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)|(?<major_2>\d+)\.(?<minor_2>\d+)|(?<major_3>\d+)"
             ).expect("Error regex");
             let mut rows = Vec::new();
-            count = self.find_components_recursive(sbom_component, &re, &_id, &mut rows);
+            let mut count = self.find_components_recursive(sbom_component, &re, &_id, &mut rows);
             for (name, version, major, minor, patch, sbom_id, raw_json) in rows {
                 if
                     self.client
@@ -324,8 +322,9 @@ impl BD {
                     count += 1;
                 }
             }
-            info!("[Info] Add {}/{} sbom components.", count, sbom_component.len());
+            info!("Stored {}/{} SBOM components for SBOM id {}", count, sbom_component.len(), _id);
         } else {
+            error!("SBOM {} does not contain components", foo);
             return Err("No one sbom components".to_string());
         }
         self.find_bug_bd_one_query(_id, full).await
@@ -406,6 +405,7 @@ impl BD {
 
     #[allow(dead_code)]
     async fn upload(&self, components: &Vec<Component>) -> Result<(), String> {
+        info!("Uploading {} BDU records to PostgreSQL", components.len());
         self.client
             .batch_execute(
                 "
@@ -545,11 +545,8 @@ impl BD {
                     &[&component.id]
                 ).await
                 .expect("pizdec query");
-            if _k.len() > 0 {
-                trace!("Component {} exist!", &component.id);
-            } else {
+            if _k.is_empty() {
                 counter += 1;
-                trace!("Add Component {}) {}!", counter, &component.id);
                 // TODO: Настроить правильные поля, к примеру время как время
                 let _ = self.client
                     .execute(
@@ -825,7 +822,7 @@ impl BD {
                 }
             }
         }
-        info!("Add {}/{} BDU.", counter, components.len());
+        info!("Stored {}/{} new BDU records", counter, components.len());
         Ok(())
     }
 }
