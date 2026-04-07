@@ -1,4 +1,4 @@
-use std::{ fs::{ self, File }, io::Write, process::{ Command, ExitStatus } };
+use std::{ fs::{ self, File }, io::Write, path::Path, process::{ Command, ExitStatus } };
 
 use bd::Bugs;
 use latex::{ Document, DocumentClass, Element, PreambleElement, Section };
@@ -18,6 +18,14 @@ mod test;
 /// * name - имя файла сборки
 pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
     info!("Generating PDF report {}.pdf with {} vulnerabilities", name, bugs.len());
+    let report_path = Path::new(name);
+    let output_dir = report_path.parent().unwrap_or_else(|| Path::new("."));
+    let base_name = report_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("Invalid report path: {}", name))?
+        .to_string();
+
     let mut doc = Document::new(DocumentClass::Article);
     doc.preamble
         .push(PreambleElement::UsePackage {
@@ -137,20 +145,28 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
     let file_name = format!("{}.tex", name);
     let mut f = File::create(&file_name).expect("open");
     let _ = f.write_all(rendered).expect("writer");
-    let exit_status = Command::new("pdflatex").arg(&file_name).status();
+    let exit_status = Command::new("pdflatex")
+        .arg("-output-directory")
+        .arg(output_dir)
+        .arg(&file_name)
+        .status();
     match exit_status {
         Ok(es) => {
-            let exit_status = Command::new("pdflatex").arg(&file_name).status();
+            let exit_status = Command::new("pdflatex")
+                .arg("-output-directory")
+                .arg(output_dir)
+                .arg(&file_name)
+                .status();
             debug!("First pdflatex exit status for {}: {}", file_name, es);
             match exit_status {
                 Ok(es) => {
                     // let _ = fs::remove_file(file_name);
-                    let _ = fs::remove_file(format!("{}.log", name));
-                    let _ = fs::remove_file(format!("{}.out", name));
-                    let _ = fs::remove_file(format!("{}.toc", name));
-                    let _ = fs::remove_file(format!("{}.aux", name));
-                    let _ = fs::remove_file(format!("{}.fls", name));
-                    let _ = fs::remove_file(format!("{}.fdb_latexmk", name));
+                    let _ = fs::remove_file(output_dir.join(format!("{}.log", base_name)));
+                    let _ = fs::remove_file(output_dir.join(format!("{}.out", base_name)));
+                    let _ = fs::remove_file(output_dir.join(format!("{}.toc", base_name)));
+                    let _ = fs::remove_file(output_dir.join(format!("{}.aux", base_name)));
+                    let _ = fs::remove_file(output_dir.join(format!("{}.fls", base_name)));
+                    let _ = fs::remove_file(output_dir.join(format!("{}.fdb_latexmk", base_name)));
                     if !ExitStatus::success(&es) {
                         error!("Second pdflatex execution failed for {}: {}", file_name, es);
                         return Err(format!("Код возврата неудачный: {}", es));

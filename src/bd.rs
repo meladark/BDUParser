@@ -8,8 +8,9 @@ use serde_json::json;
 use log::{ debug, error, info };
 use tokio_postgres::NoTls;
 use tempdir::TempDir;
+use serde_derive::Serialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Bugs {
     pub component: sbom5::Component,
     pub vuln: bdu::Component,

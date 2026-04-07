@@ -13,3 +13,5 @@ vull.xlsx
 *.pdf
 *.tex
 *.toc
+ffi/target/
+dist/
