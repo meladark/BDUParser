@@ -62,108 +62,110 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
             if old_sec != "".to_string() {
                 doc.push(sec);
             }
-            sec = Section::new(&now_sec);
+            sec = Section::new(&escape_latex(&now_sec));
             old_sec = now_sec;
         }
         sec.push(
             &*format!(
                 "\\subsection{{\\href{{https://bdu.fstec.ru/vul/{}}}{{{}}}}}",
                 &bug.vuln.id[4..],
-                &bug.vuln.id
+                escape_latex(&bug.vuln.id)
             )
         );
+        sec.push("\\begin{description}[leftmargin=3.8cm,style=nextline,font=\\normalfont\\bfseries]");
         if let Some(name_vuln) = bug.vuln.name_vuln {
-            sec.push(
-                &*format!("\\begin{{spverbatim}}Наименование: {}\\end{{spverbatim}}", &name_vuln)
-            );
+            sec.push(&*format!("\\item[Наименование] {}", escape_latex(&name_vuln)));
         }
-        for version in &bug.vuln.versions {
-            if version.name == bug.component.name {
+
+        let vulnerable_versions = bug.vuln.versions
+            .iter()
+            .filter(|version| version.name == bug.component.name)
+            .map(|version| {
                 if let Some(only) = &version.only {
-                    sec.push(&*format!("Уязвима только версия: {}", only));
-                    continue;
+                    return format!("Уязвима только версия {}", escape_latex(only));
                 }
+
                 let mut rec = "Уязвима".to_string();
                 if let Some(from) = &version.from {
-                    rec = format!("{} с версии {}", rec, from);
+                    rec = format!("{} с версии {}", rec, escape_latex(from));
                 }
                 if let Some(to) = &version.to {
-                    rec = format!("{} по версию {}", rec, to);
+                    rec = format!("{} по версию {}", rec, escape_latex(to));
                 }
                 if version.inclusive {
                     rec = format!("{} включительно", rec);
                 }
-                sec.push(&*format!("{}", rec));
+                rec
+            })
+            .collect::<Vec<String>>();
+
+        if !vulnerable_versions.is_empty() {
+            sec.push("\\item[Затронутые версии] ");
+            sec.push("\\begin{itemize}[leftmargin=*,nosep]");
+            for rec in vulnerable_versions {
+                sec.push(&*format!("\\item {}", rec));
             }
+            sec.push("\\end{itemize}");
         }
+
         if let Some(date) = bug.vuln.date {
-            sec.push(&*format!("Дата обнаружения: {}", &date));
+            sec.push(&*format!("\\item[Дата обнаружения] {}", escape_latex(&date)));
         }
         if let Some(severity) = bug.vuln.severity {
-            sec.push(&*format!("Уровень опасности: {}", &severity));
+            sec.push(&*format!("\\item[Уровень опасности] {}", escape_latex(&severity)));
         }
         if let Some(exploit) = bug.vuln.exploit {
-            sec.push(&*format!("Наличие эксплойта: {}", &exploit));
+            sec.push(&*format!("\\item[Наличие эксплойта] {}", escape_latex(&exploit)));
         }
         if let Some(fix) = bug.vuln.fix {
-            sec.push(&*format!("Информация об устранении: {}", &fix));
+            sec.push(&*format!("\\item[Устранение] {}", escape_latex(&fix)));
         }
+        sec.push("\\end{description}");
+
         if let Some(desc_vuln) = bug.vuln.desc_vuln {
-            sec.push(
-                &*format!(
-                    "\\begin{{spverbatim}}Описание уязвимости: {}\\end{{spverbatim}}",
-                    &desc_vuln
-                )
-            );
+            sec.push("\\medskip\\noindent\\textbf{Описание уязвимости}\\par");
+            sec.push(&*escape_latex(&desc_vuln));
         }
+
         if let Some(source_sites) = bug.vuln.source_sites {
-            sec.push("Информационные сайты:");
-            if source_sites.len() > 0 {
-                sec.push("\\begin{enumerate}");
+            if !source_sites.is_empty() {
+                sec.push("\\medskip\\noindent\\textbf{Источники}\\par");
+                sec.push("\\begin{itemize}[leftmargin=*,nosep]");
                 for ss in source_sites {
-                    sec.push(&*format!("\\item \\url{{{}}}", ss));
+                    sec.push(&*format!("\\item \\url{{{}}}", latex_safe_url(ss.trim())));
                 }
-                sec.push("\\end{enumerate}");
+                sec.push("\\end{itemize}");
             } else {
-                sec.push("Отстутствуют");
+                sec.push("\\medskip\\noindent\\textbf{Источники}\\par");
+                sec.push("Отсутствуют");
             }
         }
         if let Some(info) = bug.vuln.info {
             if info != "" {
-                sec.push(
-                    &*format!(
-                        "\\begin{{spverbatim}}Дополнительная информация: {}\\end{{spverbatim}}",
-                        &info
-                    )
-                );
+                sec.push("\\medskip\\noindent\\textbf{Дополнительная информация}\\par");
+                sec.push(&*escape_latex(&info));
             }
         }
+        sec.push("\\bigskip");
     }
     doc.push(sec);
     let binding = latex
         ::print(&doc)
         .map_err(|e| format!("Failed to render LaTeX document: {}", e))?;
-    let rendered = binding.as_bytes();
+    let rendered = patch_latex_preamble(&binding);
     let file_name = format!("{}.tex", name);
     let mut f = File::create(&file_name).map_err(|e|
         format!("Failed to create LaTeX source {}: {}", file_name, e)
     )?;
     f
-        .write_all(rendered)
+        .write_all(rendered.as_bytes())
         .map_err(|e| format!("Failed to write LaTeX source {}: {}", file_name, e))?;
-    let exit_status = Command::new("pdflatex")
-        .arg("-output-directory")
-        .arg(output_dir)
-        .arg(&file_name)
-        .status();
+    let latex_engine = latex_engine();
+    let exit_status = run_latex(&latex_engine, output_dir, &file_name);
     match exit_status {
         Ok(es) => {
-            let exit_status = Command::new("pdflatex")
-                .arg("-output-directory")
-                .arg(output_dir)
-                .arg(&file_name)
-                .status();
-            debug!("First pdflatex exit status for {}: {}", file_name, es);
+            let exit_status = run_latex(&latex_engine, output_dir, &file_name);
+            debug!("First {} exit status for {}: {}", latex_engine, file_name, es);
             match exit_status {
                 Ok(es) => {
                     // let _ = fs::remove_file(file_name);
@@ -174,27 +176,80 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
                     let _ = fs::remove_file(output_dir.join(format!("{}.fls", base_name)));
                     let _ = fs::remove_file(output_dir.join(format!("{}.fdb_latexmk", base_name)));
                     if !ExitStatus::success(&es) {
-                        error!("Second pdflatex execution failed for {}: {}", file_name, es);
+                        error!("Second {} execution failed for {}: {}", latex_engine, file_name, es);
                         return Err(format!("Код возврата неудачный: {}", es));
                     }
                 }
                 Err(e) => {
-                    error!("Second pdflatex execution failed for {}: {}", file_name, e);
+                    error!("Second {} execution failed for {}: {}", latex_engine, file_name, e);
                     return Err(format!("Error second generate pdf: {}", e));
                 }
             }
             if !ExitStatus::success(&es) {
-                error!("First pdflatex execution failed for {}: {}", file_name, es);
+                error!("First {} execution failed for {}: {}", latex_engine, file_name, es);
                 return Err(format!("Код возврата неудачный: {}", es));
             }
         }
         Err(e) => {
-            error!("Failed to start first pdflatex execution for {}: {}", file_name, e);
+            error!("Failed to start first {} execution for {}: {}", latex_engine, file_name, e);
             return Err(format!("Error first generate pdf: {}", e));
         }
     }
     info!("Generated PDF report {}.pdf", name);
     Ok(())
+}
+
+fn patch_latex_preamble(rendered: &str) -> String {
+    rendered.replace(
+        "\\usepackage[utf8]{inputenc}\n\\usepackage[T2A]{fontenc}\n\\usepackage[english,russian]{babel}\n\\usepackage{amsmath}\n\\usepackage{hyperref}\n\\usepackage{spverbatim}\n",
+        "\\usepackage{iftex}\n\\ifPDFTeX\n\\usepackage[utf8]{inputenc}\n\\usepackage[T2A]{fontenc}\n\\usepackage[english,russian]{babel}\n\\else\n\\usepackage{fontspec}\n\\usepackage{polyglossia}\n\\setmainlanguage{russian}\n\\setotherlanguage{english}\n\\setmainfont{Times New Roman}\n\\setsansfont{Arial}\n\\setmonofont{Arial}\n\\fi\n\\usepackage[a4paper,margin=1in]{geometry}\n\\usepackage{enumitem}\n\\usepackage{xurl}\n\\usepackage{amsmath}\n\\usepackage{hyperref}\n\\usepackage{spverbatim}\n\\hypersetup{hidelinks}\n\\setlength{\\parindent}{0pt}\n\\setlength{\\parskip}{0.5em}\n"
+    )
+}
+
+fn latex_engine() -> &'static str {
+    if Command::new("xelatex").arg("--version").output().is_ok() {
+        "xelatex"
+    } else {
+        "pdflatex"
+    }
+}
+
+fn run_latex(engine: &str, output_dir: &Path, file_name: &str) -> std::io::Result<ExitStatus> {
+    Command::new(engine)
+        .arg("-interaction=nonstopmode")
+        .arg("-halt-on-error")
+        .arg("-output-directory")
+        .arg(output_dir)
+        .arg(file_name)
+        .status()
+}
+
+fn escape_latex(input: &str) -> String {
+    input
+        .chars()
+        .map(|ch| match ch {
+            '\\' => "\\textbackslash{}".to_string(),
+            '{' => "\\{".to_string(),
+            '}' => "\\}".to_string(),
+            '#' => "\\#".to_string(),
+            '$' => "\\$".to_string(),
+            '%' => "\\%".to_string(),
+            '&' => "\\&".to_string(),
+            '_' => "\\_".to_string(),
+            '~' => "\\textasciitilde{}".to_string(),
+            '^' => "\\textasciicircum{}".to_string(),
+            '\n' => "\\\\\n".to_string(),
+            _ => ch.to_string(),
+        })
+        .collect()
+}
+
+fn latex_safe_url(input: &str) -> String {
+    input
+        .trim()
+        .replace('\\', "%5C")
+        .replace('{', "%7B")
+        .replace('}', "%7D")
 }
 
 /// Сгенерировать Excel отчет по полученным багам от `self.find`.

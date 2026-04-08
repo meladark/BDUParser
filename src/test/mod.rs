@@ -81,19 +81,22 @@ mod test {
 
     #[tokio::test]
     async fn test_latex() {
+        let file_name = "dist/test_latex_report".to_string();
         //let t = BD::default().await.expect("Error connect");
         let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
             "Error New"
         );
-        match t.find(&"extra/cleaned_data.json".to_string(), true).await {
-            Ok(bugs) => {
-                match get_pdf(bugs, &"test".to_string()) {
-                    Ok(_) => println!("Well done"),
-                    Err(e) => println!("Well fuck: {}", e),
-                };
-            }
-            Err(err) => println!("[Error] {}", err),
-        }
+        let bugs = t
+            .find(&"extra/cleaned_data.json".to_string(), true)
+            .await
+            .expect("failed to collect vulnerabilities for PDF report");
+
+        get_pdf(bugs, &file_name).expect("failed to create PDF report");
+
+        assert!(std::path::Path::new(&format!("{}.pdf", file_name)).exists());
+
+        //fs::remove_file(format!("{}.pdf", file_name)).expect("failed to delete pdf report");
+        fs::remove_file(format!("{}.tex", file_name)).expect("failed to delete tex source");
     }
 
     #[tokio::test]
