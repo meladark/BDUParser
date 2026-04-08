@@ -6,7 +6,7 @@ use serde_derive::Serialize;
 use regex::Regex;
 use std::path::PathBuf;
 
-use calamine::{open_workbook, Reader, Xlsx};
+use calamine::{ Reader, Xlsx, open_workbook };
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -583,18 +583,11 @@ pub fn xlsx_parser(pt: &PathBuf, sheet_name: &String) -> Option<Vec<Component>> 
                     com
                 });
             }
-            info!(
-                "Parsed {} BDU components from sheet '{}'",
-                bdu_components.len(),
-                sheet_name
-            );
+            info!("Parsed {} BDU components from sheet '{}'", bdu_components.len(), sheet_name);
             Some(bdu_components)
         }
         Err(xlsx_error) => {
-            error!(
-                "Failed to read sheet '{}' from {:?}: {:?}",
-                sheet_name, pt, xlsx_error
-            );
+            error!("Failed to read sheet '{}' from {:?}: {:?}", sheet_name, pt, xlsx_error);
             None
         }
     }

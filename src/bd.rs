@@ -1,14 +1,14 @@
-use std::{ fs, process::Command };
+use std::{ fs, process::{ Command, Output } };
 
 // #![crate_name = "doc"]
-use crate::{ bdu::{ self, xlsx_parser, Component }, sbom5 };
+use crate::{ bdu::{ self, Component, xlsx_parser }, sbom5 };
+use log::{ debug, error, info };
 use postgres::types::Json;
 use regex::Regex;
-use serde_json::json;
-use log::{ debug, error, info };
-use tokio_postgres::NoTls;
-use tempdir::TempDir;
 use serde_derive::Serialize;
+use serde_json::json;
+use tempdir::TempDir;
+use tokio_postgres::NoTls;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Bugs {
@@ -41,9 +41,7 @@ impl BD {
                         error!("PostgreSQL connection task failed: {}", e);
                     }
                 });
-                Ok(Self {
-                    client: _client,
-                })
+                Ok(Self { client: _client })
             }
             Err(err) => {
                 error!("Failed to open PostgreSQL connection: {}", err);
@@ -67,9 +65,7 @@ impl BD {
                         error!("Default PostgreSQL connection task failed: {}", e);
                     }
                 });
-                Ok(Self {
-                    client: _client,
-                })
+                Ok(Self { client: _client })
             }
             Err(err) => {
                 error!("Failed to open default PostgreSQL connection: {}", err);
@@ -171,7 +167,7 @@ impl BD {
         }
         let row = self.client
             .query(query, &[&id]).await
-            .expect("Error SELECT public.sbom_components.\"raw\"");
+            .map_err(|e| { format!("Failed to query vulnerabilities for SBOM id {}: {}", id, e) })?;
 
         let mut bugs = Vec::<Bugs>::new();
         for r in row {
@@ -192,26 +188,25 @@ impl BD {
     /// Не поддерживается Windows
     pub async fn update(&self) -> Result<(), String> {
         info!("Starting BDU dataset refresh");
-        let tmp_dir = TempDir::new("BDUParser").expect("Не могу создать временную папку");
+        let tmp_dir = TempDir::new("BDUParser").map_err(|e|
+            format!("Не могу создать временную папку: {}", e)
+        )?;
         let path = tmp_dir.path();
         debug!("Using temporary directory for BDU refresh: {:?}", path);
         let file_path = path.join("vull.xlsx");
         let output = if cfg!(target_os = "windows") {
             error!("BDU refresh is not supported on Windows");
-            Command::new("cmd")
-                .args(["/C", "Windows doesn`t support yet"])
-                .output()
-                .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
             info!("Downloading BDU XLSX dataset");
-            Command::new("wget")
-                .arg("--no-check-certificate")
-                .arg("https://bdu.fstec.ru/files/documents/vullist.xlsx")
-                .arg("-O")
-                .arg(&file_path)
-                .output()
-                .expect("failed to execute process")
+            run_command(
+                Command::new("wget")
+                    .arg("--no-check-certificate")
+                    .arg("https://bdu.fstec.ru/files/documents/vullist.xlsx")
+                    .arg("-O")
+                    .arg(&file_path),
+                "Failed to download BDU XLSX dataset"
+            )?
         };
         if output.status.success() {
             let bdu_components = xlsx_parser(&file_path, &String::from("Уязвимости"));
@@ -227,14 +222,14 @@ impl BD {
             let _ = tmp_dir.close();
             let res = format!(
                 "Get BDU database error: Status: {} Stderr: {}",
-                output.status
-                ,String::from_utf8_lossy(&output.stderr)
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
             );
             error!("{}", &res);
             return Err(res);
         }
     }
-    
+
     #[allow(dead_code)]
     /// Поиск уязвимостей в sbom файле.
     /// Работает только на Linux. Для работы требуется cyclonedx-linux-x64 в системе для работы.
@@ -253,10 +248,6 @@ impl BD {
         info!("Starting SBOM analysis for {}", foo);
         let output = if cfg!(target_os = "windows") {
             error!("SBOM analysis is not supported on Windows");
-            Command::new("cmd")
-                .args(["/C", "Windows doesn`t support yet"])
-                .output()
-                .expect("failed to execute process");
             return Err("Windows platform doesn`t support yet".to_string());
         } else {
             process_file(foo).map_err(|e| {
@@ -265,16 +256,26 @@ impl BD {
                 message
             })?;
             debug!("Converting SBOM {} to CycloneDX 1.5 JSON", foo);
-            Command::new("cyclonedx") // TODO: change ? ./cyclonedx-linux-x64
-                .arg("convert")
-                .args(["--input-file", foo, "--output-format", "json", "--output-version", "v1_5"])
-                .output()
-                .expect("failed to execute process")
+            run_command(
+                Command::new("cyclonedx") // TODO: change ? ./cyclonedx-linux-x64
+                    .arg("convert")
+                    .args([
+                        "--input-file",
+                        foo,
+                        "--output-format",
+                        "json",
+                        "--output-version",
+                        "v1_5",
+                    ]),
+                &format!("Failed to convert SBOM {} with cyclonedx", foo)
+            )?
         };
         let sbom: sbom5::Root;
-        let mut _id = 0;
+        let sbom_id: i32;
         if output.status.success() {
-            let cin = &String::from_utf8(output.stdout).expect("pizdec conver");
+            let cin = String::from_utf8(output.stdout).map_err(|e|
+                format!("CycloneDX output for {} is not valid UTF-8: {}", foo, e)
+            )?;
             let ans = self.client
                 .query(
                     "
@@ -282,15 +283,20 @@ impl BD {
             ",
                     &[&json!(&cin)]
                 ).await
-                .expect("Error insert into SBOM_raw");
-            _id = ans[0].get::<_, i32>(0);
-            sbom = serde_json::from_str::<sbom5::Root>(&cin).expect("Bad json");
+                .map_err(|e| format!("Failed to insert raw SBOM for {}: {}", foo, e))?;
+            sbom_id = ans
+                .first()
+                .map(|row| row.get::<_, i32>(0))
+                .ok_or_else(|| format!("SBOM insert for {} returned no id", foo))?;
+            sbom = serde_json
+                ::from_str::<sbom5::Root>(&cin)
+                .map_err(|e| format!("CycloneDX output for {} is not valid JSON: {}", foo, e))?;
         } else {
             let ret = format!(
                 "Convert error for {}: Status: {} Stderr: {}",
                 foo,
-                output.status
-                ,String::from_utf8_lossy(&output.stderr)
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
             );
             error!("{}", &ret);
             return Err(ret);
@@ -300,9 +306,14 @@ impl BD {
             debug!("SBOM {} contains {} top-level components", foo, sbom_component.len());
             let re = Regex::new(
                 r"(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)|(?<major_2>\d+)\.(?<minor_2>\d+)|(?<major_3>\d+)"
-            ).expect("Error regex");
+            ).map_err(|e| format!("Failed to build SBOM version regex: {}", e))?;
             let mut rows = Vec::new();
-            let mut count = self.find_components_recursive(sbom_component, &re, &_id, &mut rows);
+            let mut count = self.find_components_recursive(
+                sbom_component,
+                &re,
+                &sbom_id,
+                &mut rows
+            );
             for (name, version, major, minor, patch, sbom_id, raw_json) in rows {
                 if
                     self.client
@@ -318,17 +329,23 @@ impl BD {
                                 &raw_json,
                             ]
                         ).await
-                        .expect("Error INSERT INTO public.sbom_components") > 0
+                        .map_err(|e| format!("Failed to insert SBOM component {}: {}", name, e))? >
+                    0
                 {
                     count += 1;
                 }
             }
-            info!("Stored {}/{} SBOM components for SBOM id {}", count, sbom_component.len(), _id);
+            info!(
+                "Stored {}/{} SBOM components for SBOM id {}",
+                count,
+                sbom_component.len(),
+                sbom_id
+            );
         } else {
             error!("SBOM {} does not contain components", foo);
             return Err("No one sbom components".to_string());
         }
-        self.find_bug_bd_one_query(_id, full).await
+        self.find_bug_bd_one_query(sbom_id, full).await
     }
 
     fn find_components_recursive<'a>(
@@ -340,54 +357,17 @@ impl BD {
     ) -> i32 {
         let mut count = 0;
         for component in components {
-            let major = {
-                let mut ret = 0_i32;
-                if let Some(ver) = &component.version {
-                    let names = ["major", "major_2", "major_3"];
-                    if let Some(caps) = re.captures(&ver) {
-                        for name in names {
-                            if let Some(c) = caps.name(name) {
-                                let nop = c.as_str().parse::<i32>();
-                                if !nop.is_err() {
-                                    ret = nop.unwrap();
-                                }
-                            }
-                        }
-                    }
-                }
-                ret
-            };
-            let minor = {
-                let mut ret = 0_i32;
-                if let Some(ver) = &component.version {
-                    let names = ["minor", "minor_2"];
-                    if let Some(caps) = re.captures(&ver) {
-                        for name in names {
-                            if let Some(c) = caps.name(name) {
-                                let nop = c.as_str().parse::<i32>();
-                                if !nop.is_err() {
-                                    ret = nop.unwrap();
-                                }
-                            }
-                        }
-                    }
-                }
-                ret
-            };
-            let ver = {
-                let mut ret = 0_i32;
-                if let Some(ver) = &component.version {
-                    if let Some(caps) = re.captures(&ver) {
-                        if let Some(c) = caps.name("patch") {
-                            let nop = c.as_str().parse::<i32>();
-                            if !nop.is_err() {
-                                ret = nop.unwrap();
-                            }
-                        }
-                    }
-                }
-                ret
-            };
+            let major = parse_version_fragment(
+                component.version.as_ref(),
+                re,
+                &["major", "major_2", "major_3"]
+            );
+            let minor = parse_version_fragment(
+                component.version.as_ref(),
+                re,
+                &["minor", "minor_2"]
+            );
+            let ver = parse_version_fragment(component.version.as_ref(), re, &["patch"]);
             out.push((
                 &component.name,
                 component.version.as_ref(),
@@ -831,6 +811,23 @@ impl BD {
 use serde_json::Value;
 use std::error::Error;
 
+fn run_command(command: &mut Command, context: &str) -> Result<Output, String> {
+    command.output().map_err(|e| format!("{}: {}", context, e))
+}
+
+fn parse_version_fragment(version: Option<&String>, re: &Regex, capture_names: &[&str]) -> i32 {
+    version
+        .and_then(|value| re.captures(value))
+        .and_then(|captures| {
+            capture_names
+                .iter()
+                .find_map(|name| {
+                    captures.name(name).and_then(|capture| capture.as_str().parse::<i32>().ok())
+                })
+        })
+        .unwrap_or_default()
+}
+
 fn remove_hashes_fields(value: &mut Value) {
     match value {
         Value::Object(map) => {
@@ -838,12 +835,12 @@ fn remove_hashes_fields(value: &mut Value) {
             for v in map.values_mut() {
                 remove_hashes_fields(v);
             }
-        },
+        }
         Value::Array(arr) => {
             for v in arr {
                 remove_hashes_fields(v);
             }
-        },
+        }
         _ => {}
     }
 }

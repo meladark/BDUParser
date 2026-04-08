@@ -1,18 +1,20 @@
 #[cfg(test)]
 mod test {
-    use std::fs;
-    use std::time::Instant;
-    use calamine::{ open_workbook, Reader, Xlsx };
+    use crate::{ bd::{ BD, Bugs }, bdu, get_excel, get_pdf, sbom5 };
+    use calamine::{ Reader, Xlsx, open_workbook };
     use env_logger;
     use log::info;
-    use crate::{ bd::{ BD, Bugs }, bdu, get_excel, get_pdf, sbom5 };
+    use std::fs;
+    use std::time::Instant;
 
     #[tokio::test]
     async fn test_postgres() {
         env_logger::init();
         info!("Start test_postgres!!!!!");
         //let t = BD::default().await.expect("Error default");
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect("Error New");
+        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
+            "Error New"
+        );
         info!("Start updating DataBase.");
         match t.update().await {
             Ok(_) => println!("Well done"),
@@ -25,9 +27,11 @@ mod test {
         info!("Start test_find_bug_bd_one_query!!!!!");
         let start = Instant::now();
         // let t = BD::default().await.expect("Error connect");
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect("Error New");
+        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
+            "Error New"
+        );
         match t.find(&"extra/cleaned_data.json".to_string(), false).await {
-            Ok(k) =>
+            Ok(k) => {
                 for i in k {
                     println!(
                         "{}@{} {}",
@@ -39,6 +43,7 @@ mod test {
                         i.vuln.id
                     );
                 }
+            }
             Err(err) => println!("[Error] {}", err),
         }
         let duration = start.elapsed();
@@ -51,9 +56,11 @@ mod test {
         info!("Start no valid json!!!!!");
         let start = Instant::now();
         // let t = BD::default().await.expect("Error connect");
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect("Error New");
+        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
+            "Error New"
+        );
         match t.find(&"extra/no_valid.json".to_string(), false).await {
-            Ok(k) =>
+            Ok(k) => {
                 for i in k {
                     println!(
                         "{}@{} {}",
@@ -65,6 +72,7 @@ mod test {
                         i.vuln.id
                     );
                 }
+            }
             Err(err) => println!("[Error] {}", err),
         }
         let duration = start.elapsed();
@@ -74,7 +82,9 @@ mod test {
     #[tokio::test]
     async fn test_latex() {
         //let t = BD::default().await.expect("Error connect");
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect("Error New");
+        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
+            "Error New"
+        );
         match t.find(&"extra/cleaned_data.json".to_string(), true).await {
             Ok(bugs) => {
                 match get_pdf(bugs, &"test".to_string()) {
@@ -88,7 +98,9 @@ mod test {
 
     #[tokio::test]
     async fn test_excel_file() {
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect("Error New");
+        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
+            "Error New"
+        );
         match t.find(&"extra/cleaned_data.json".to_string(), true).await {
             Ok(bugs) => {
                 match get_excel(bugs, &"test_excel".to_string()) {
@@ -134,16 +146,19 @@ mod test {
 
         get_excel(vec![bug], &file_name).expect("failed to create xlsx report");
 
-        let mut workbook: Xlsx<_> = open_workbook(&report_path).expect("failed to open xlsx report");
-        let range = workbook
-            .worksheet_range("Report")
-            .expect("failed to read report sheet");
+        let mut workbook: Xlsx<_> = open_workbook(&report_path).expect(
+            "failed to open xlsx report"
+        );
+        let range = workbook.worksheet_range("Report").expect("failed to read report sheet");
 
         assert_eq!(range.get_value((0, 0)).expect("missing header").to_string(), "Компонент");
         assert_eq!(range.get_value((1, 0)).expect("missing component").to_string(), "openssl");
         assert_eq!(range.get_value((1, 1)).expect("missing version").to_string(), "1.1.1");
         assert_eq!(range.get_value((1, 2)).expect("missing vuln id").to_string(), "BDU:2024-0001");
-        assert_eq!(range.get_value((1, 3)).expect("missing vuln name").to_string(), "Тестовая уязвимость");
+        assert_eq!(
+            range.get_value((1, 3)).expect("missing vuln name").to_string(),
+            "Тестовая уязвимость"
+        );
         assert_eq!(
             range.get_value((1, 4)).expect("missing vulnerable versions").to_string(),
             "Уязвима с версии 1.0.0 по версию 1.1.1 включительно"

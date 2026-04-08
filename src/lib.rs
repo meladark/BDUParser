@@ -140,11 +140,17 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
         }
     }
     doc.push(sec);
-    let binding = latex::print(&doc).expect("print");
+    let binding = latex
+        ::print(&doc)
+        .map_err(|e| format!("Failed to render LaTeX document: {}", e))?;
     let rendered = binding.as_bytes();
     let file_name = format!("{}.tex", name);
-    let mut f = File::create(&file_name).expect("open");
-    let _ = f.write_all(rendered).expect("writer");
+    let mut f = File::create(&file_name).map_err(|e|
+        format!("Failed to create LaTeX source {}: {}", file_name, e)
+    )?;
+    f
+        .write_all(rendered)
+        .map_err(|e| format!("Failed to write LaTeX source {}: {}", file_name, e))?;
     let exit_status = Command::new("pdflatex")
         .arg("-output-directory")
         .arg(output_dir)
@@ -192,7 +198,7 @@ pub fn get_pdf(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
 }
 
 /// Сгенерировать Excel отчет по полученным багам от `self.find`.
-/// 
+///
 /// # Arguments
 /// * bugs - Список багов
 /// * name - имя файла сборки
@@ -219,9 +225,7 @@ pub fn get_excel(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
     ];
 
     for (col, header) in headers.iter().enumerate() {
-        worksheet
-            .write_string(0, col as u16, *header)
-            .map_err(|e| e.to_string())?;
+        worksheet.write_string(0, col as u16, *header).map_err(|e| e.to_string())?;
     }
 
     for (idx, bug) in bugs.iter().enumerate() {
@@ -250,21 +254,15 @@ pub fn get_excel(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
             .join("; ");
         let source_sites = bug.vuln.source_sites.clone().unwrap_or_default().join("\n");
 
-        worksheet
-            .write_string(row, 0, &bug.component.name)
-            .map_err(|e| e.to_string())?;
+        worksheet.write_string(row, 0, &bug.component.name).map_err(|e| e.to_string())?;
         worksheet
             .write_string(row, 1, bug.component.version.as_deref().unwrap_or(""))
             .map_err(|e| e.to_string())?;
-        worksheet
-            .write_string(row, 2, &bug.vuln.id)
-            .map_err(|e| e.to_string())?;
+        worksheet.write_string(row, 2, &bug.vuln.id).map_err(|e| e.to_string())?;
         worksheet
             .write_string(row, 3, bug.vuln.name_vuln.as_deref().unwrap_or(""))
             .map_err(|e| e.to_string())?;
-        worksheet
-            .write_string(row, 4, &vulnerable_versions)
-            .map_err(|e| e.to_string())?;
+        worksheet.write_string(row, 4, &vulnerable_versions).map_err(|e| e.to_string())?;
         worksheet
             .write_string(row, 5, bug.vuln.date.as_deref().unwrap_or(""))
             .map_err(|e| e.to_string())?;
@@ -280,9 +278,7 @@ pub fn get_excel(bugs: Vec<Bugs>, name: &String) -> Result<(), String> {
         worksheet
             .write_string(row, 9, bug.vuln.desc_vuln.as_deref().unwrap_or(""))
             .map_err(|e| e.to_string())?;
-        worksheet
-            .write_string(row, 10, &source_sites)
-            .map_err(|e| e.to_string())?;
+        worksheet.write_string(row, 10, &source_sites).map_err(|e| e.to_string())?;
         worksheet
             .write_string(row, 11, bug.vuln.info.as_deref().unwrap_or(""))
             .map_err(|e| e.to_string())?;
