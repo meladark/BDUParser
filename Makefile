@@ -1,6 +1,7 @@
 .PHONY: build build_env test clean all \
 	ffi-build ffi-build-macos-arm64 ffi-build-linux-amd64 ffi-build-all \
-	ffi-go-test ffi-test ffi-tools ffi-package help
+	ffi-go-test ffi-test ffi-tools ffi-package \
+	docker-test-image docker-test docker-test-latex help
 
 NATIVE_RUST_TARGET := aarch64-apple-darwin
 LINUX_AMD64_RUST_TARGET := x86_64-unknown-linux-gnu
@@ -11,6 +12,8 @@ ZIGBUILD_BIN := $(shell if command -v cargo-zigbuild >/dev/null 2>&1; then comma
 RUSTUP_TOOLCHAIN := $(shell rustup show active-toolchain | cut -d' ' -f1)
 RUSTUP_RUN := rustup run $(RUSTUP_TOOLCHAIN)
 RUSTUP_RUSTC := $(shell rustup which rustc --toolchain $(RUSTUP_TOOLCHAIN))
+DOCKER_TEST_IMAGE := bdu-parser-test:debian-latest
+DOCKER_TEST_DB_URL := postgresql://bdu:bdu@host.docker.internal:5438/bdu
 
 build_env:
 	docker-compose up -d 
@@ -72,6 +75,34 @@ test: build
 	RUST_LOG=debug cargo test --package bdu_parser --lib -- tests
 	docker-compose stop
 
+docker-test-image:
+	echo "Build Debian test image"
+	docker build -f Dockerfile.test -t $(DOCKER_TEST_IMAGE) .
+
+docker-test: docker-test-image
+	echo "Run tests in Debian container"
+	docker-compose up -d
+	docker run --rm \
+		--add-host=host.docker.internal:host-gateway \
+		-e BDU_TEST_DATABASE_URL=$(DOCKER_TEST_DB_URL) \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		$(DOCKER_TEST_IMAGE) \
+		/bin/sh -lc 'cargo test --package bdu_parser --lib -- --nocapture'
+	docker-compose stop
+
+docker-test-latex: docker-test-image
+	echo "Run test_latex in Debian container"
+	docker-compose up -d
+	docker run --rm \
+		--add-host=host.docker.internal:host-gateway \
+		-e BDU_TEST_DATABASE_URL=$(DOCKER_TEST_DB_URL) \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		$(DOCKER_TEST_IMAGE) \
+		/bin/sh -lc 'cargo test test_latex -- --nocapture'
+	docker-compose stop
+
 clean:
 	cargo clean
 	docker-compose stop
@@ -90,4 +121,7 @@ help:
 		"ffi-go-test           Build native FFI cdylib and run Go tests" \
 		"ffi-test              Alias for ffi-go-test" \
 		"ffi-tools             Show recommended cross-build tool setup" \
-		"ffi-package           Build and copy FFI artifacts into dist/ffi"
+		"ffi-package           Build and copy FFI artifacts into dist/ffi" \
+		"docker-test-image     Build Debian-based Docker image for test runs" \
+		"docker-test           Run Rust tests inside the Debian test image" \
+		"docker-test-latex     Run only test_latex inside the Debian test image"

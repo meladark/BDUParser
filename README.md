@@ -97,6 +97,22 @@ make ffi-build-all
 make ffi-package
 ```
 
+Для проверки воспроизводимого окружения тестов есть Debian-based Docker image:
+
+```bash
+make docker-test-image
+make docker-test
+```
+
+`make docker-test`:
+
+- собирает образ из `Dockerfile.test`
+- поднимает PostgreSQL через `docker-compose.yml`
+- запускает `cargo test --package bdu_parser --lib -- tests` внутри контейнера
+
+По умолчанию контейнер использует `BDU_TEST_DATABASE_URL=postgresql://bdu:bdu@host.docker.internal:5438/bdu`.
+Локально тесты по-прежнему работают без этой переменной и используют `postgresql://bdu:bdu@localhost:5438/bdu`.
+
 На macOS для сборки Linux `amd64` рекомендованный вариант - `zig` + `cargo-zigbuild`:
 
 ```bash

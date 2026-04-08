@@ -1,0 +1,14 @@
+.git
+.github
+target/
+dist/
+postgres_data/
+ffi/target/
+.DS_Store
+*.xlsx
+*.pdf
+*.tex
+*.aux
+*.log
+*.out
+*.toc

@@ -4,17 +4,20 @@ mod test {
     use calamine::{ Reader, Xlsx, open_workbook };
     use env_logger;
     use log::info;
-    use std::fs;
+    use std::{ env, fs };
     use std::time::Instant;
+
+    fn test_database_url() -> String {
+        env::var("BDU_TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://bdu:bdu@localhost:5438/bdu".to_string())
+    }
 
     #[tokio::test]
     async fn test_postgres() {
         env_logger::init();
         info!("Start test_postgres!!!!!");
         //let t = BD::default().await.expect("Error default");
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
-            "Error New"
-        );
+        let t = BD::new(&test_database_url()).await.expect("Error New");
         info!("Start updating DataBase.");
         match t.update().await {
             Ok(_) => println!("Well done"),
@@ -27,9 +30,7 @@ mod test {
         info!("Start test_find_bug_bd_one_query!!!!!");
         let start = Instant::now();
         // let t = BD::default().await.expect("Error connect");
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
-            "Error New"
-        );
+        let t = BD::new(&test_database_url()).await.expect("Error New");
         match t.find(&"extra/cleaned_data.json".to_string(), false).await {
             Ok(k) => {
                 for i in k {
@@ -56,9 +57,7 @@ mod test {
         info!("Start no valid json!!!!!");
         let start = Instant::now();
         // let t = BD::default().await.expect("Error connect");
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
-            "Error New"
-        );
+        let t = BD::new(&test_database_url()).await.expect("Error New");
         match t.find(&"extra/no_valid.json".to_string(), false).await {
             Ok(k) => {
                 for i in k {
@@ -83,9 +82,7 @@ mod test {
     async fn test_latex() {
         let file_name = "dist/test_latex_report".to_string();
         //let t = BD::default().await.expect("Error connect");
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
-            "Error New"
-        );
+        let t = BD::new(&test_database_url()).await.expect("Error New");
         let bugs = t
             .find(&"extra/cleaned_data.json".to_string(), true)
             .await
@@ -95,15 +92,13 @@ mod test {
 
         assert!(std::path::Path::new(&format!("{}.pdf", file_name)).exists());
 
-        //fs::remove_file(format!("{}.pdf", file_name)).expect("failed to delete pdf report");
+        fs::remove_file(format!("{}.pdf", file_name)).expect("failed to delete pdf report");
         fs::remove_file(format!("{}.tex", file_name)).expect("failed to delete tex source");
     }
 
     #[tokio::test]
     async fn test_excel_file() {
-        let t = BD::new(&"postgresql://bdu:bdu@localhost:5438/bdu".to_string()).await.expect(
-            "Error New"
-        );
+        let t = BD::new(&test_database_url()).await.expect("Error New");
         match t.find(&"extra/cleaned_data.json".to_string(), true).await {
             Ok(bugs) => {
                 match get_excel(bugs, &"test_excel".to_string()) {
