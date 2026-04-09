@@ -579,6 +579,7 @@ impl BD {
                         ]
                     ).await
                     .expect("pizdec");
+                info!("Added new BDU id {}", component.id);
                 let versions = &component.versions;
                 {
                     if versions.len() > 0 {

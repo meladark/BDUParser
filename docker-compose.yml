@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   postgresql:
-    image: postgres:latest
+    image: postgres:17
     container_name: bdu_postgres
     restart: always
     shm_size: 1g

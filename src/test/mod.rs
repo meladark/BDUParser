@@ -4,19 +4,35 @@ mod test {
     use calamine::{ Reader, Xlsx, open_workbook };
     use env_logger;
     use log::info;
+    use log::LevelFilter;
     use std::{ env, fs };
+    use std::sync::Once;
     use std::time::Instant;
 
+    fn init_test_logger() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            let mut builder = env_logger::Builder::from_default_env();
+            builder.is_test(true);
+            if env::var("RUST_LOG").is_err() {
+                builder.filter_level(LevelFilter::Info);
+            }
+            let _ = builder.try_init();
+        });
+    }
+
     fn test_database_url() -> String {
-        env::var("BDU_TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://bdu:bdu@localhost:5438/bdu".to_string())
+        env::var("BDU_TEST_DATABASE_URL").unwrap_or_else(|_|
+            "postgresql://bdu:bdu@localhost:5438/bdu".to_string()
+        )
     }
 
     #[tokio::test]
     async fn test_postgres() {
-        env_logger::init();
+        init_test_logger();
         info!("Start test_postgres!!!!!");
         //let t = BD::default().await.expect("Error default");
+        info!("Start connecting to DataBase.");
         let t = BD::new(&test_database_url()).await.expect("Error New");
         info!("Start updating DataBase.");
         match t.update().await {
@@ -24,9 +40,10 @@ mod test {
             Err(err) => println!("{}", err),
         }
     }
+
     #[tokio::test]
     async fn test_find_bug_bd_one_query() {
-        env_logger::init();
+        init_test_logger();
         info!("Start test_find_bug_bd_one_query!!!!!");
         let start = Instant::now();
         // let t = BD::default().await.expect("Error connect");
@@ -53,7 +70,7 @@ mod test {
 
     #[tokio::test]
     async fn test_no_valid() {
-        env_logger::init();
+        init_test_logger();
         info!("Start no valid json!!!!!");
         let start = Instant::now();
         // let t = BD::default().await.expect("Error connect");
@@ -84,8 +101,7 @@ mod test {
         //let t = BD::default().await.expect("Error connect");
         let t = BD::new(&test_database_url()).await.expect("Error New");
         let bugs = t
-            .find(&"extra/cleaned_data.json".to_string(), true)
-            .await
+            .find(&"extra/cleaned_data.json".to_string(), true).await
             .expect("failed to collect vulnerabilities for PDF report");
 
         get_pdf(bugs, &file_name).expect("failed to create PDF report");
