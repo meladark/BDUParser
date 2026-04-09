@@ -1,6 +1,45 @@
-use std::ffi::{CStr, CString, c_char};
+use std::{
+    env,
+    ffi::{c_char, CStr, CString},
+    sync::{Once, OnceLock, RwLock},
+};
+
 use bdu_parser::{bd::BD, get_excel, get_pdf};
+use log::{LevelFilter, Log, Metadata, Record};
 use serde::Serialize;
+
+type LogCallback = extern "C" fn(*const c_char);
+
+struct FfiLogger {
+    inner: env_logger::Logger,
+}
+
+impl Log for FfiLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        self.inner.enabled(metadata)
+    }
+
+    fn log(&self, record: &Record) {
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+
+        self.inner.log(record);
+
+        let callback = callback_slot().read().ok().and_then(|guard| *guard);
+        if let Some(callback) = callback {
+            let message = format!("[{} {}] {}", record.level(), record.target(), record.args())
+                .replace('\0', " ");
+            if let Ok(message) = CString::new(message) {
+                callback(message.as_ptr());
+            }
+        }
+    }
+
+    fn flush(&self) {
+        self.inner.flush();
+    }
+}
 
 #[derive(Serialize)]
 struct FfiResponse<T> {
@@ -52,6 +91,26 @@ fn read_required_string(input: *const c_char, field: &str) -> Result<String, Str
         .map_err(|_| format!("{} is not valid UTF-8", field))
 }
 
+fn callback_slot() -> &'static RwLock<Option<LogCallback>> {
+    static LOG_CALLBACK: OnceLock<RwLock<Option<LogCallback>>> = OnceLock::new();
+    LOG_CALLBACK.get_or_init(|| RwLock::new(None))
+}
+
+fn init_ffi_logger() {
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        let mut builder = env_logger::Builder::from_default_env();
+        if env::var("RUST_LOG").is_err() {
+            builder.filter_level(LevelFilter::Info);
+        }
+        let logger = FfiLogger {
+            inner: builder.build(),
+        };
+        log::set_max_level(LevelFilter::Trace);
+        let _ = log::set_boxed_logger(Box::new(logger));
+    });
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn bdu_parser_free_string(value: *mut c_char) {
     if value.is_null() {
@@ -72,7 +131,16 @@ pub extern "C" fn bdu_parser_version() -> *mut c_char {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn bdu_parser_set_log_callback(callback: Option<LogCallback>) {
+    init_ffi_logger();
+    if let Ok(mut slot) = callback_slot().write() {
+        *slot = callback;
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn bdu_parser_update(postgres_url: *const c_char) -> *mut c_char {
+    init_ffi_logger();
     let result = (|| {
         let postgres_url = read_required_string(postgres_url, "postgres_url")?;
         let runtime = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
@@ -93,6 +161,7 @@ pub extern "C" fn bdu_parser_find_json(
     sbom_path: *const c_char,
     full: bool,
 ) -> *mut c_char {
+    init_ffi_logger();
     let result = (|| {
         let postgres_url = read_required_string(postgres_url, "postgres_url")?;
         let sbom_path = read_required_string(sbom_path, "sbom_path")?;
@@ -114,6 +183,7 @@ pub extern "C" fn bdu_parser_generate_reports(
     report_name: *const c_char,
     full: bool,
 ) -> *mut c_char {
+    init_ffi_logger();
     let result = (|| {
         let postgres_url = read_required_string(postgres_url, "postgres_url")?;
         let sbom_path = read_required_string(sbom_path, "sbom_path")?;

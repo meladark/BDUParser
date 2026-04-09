@@ -207,11 +207,7 @@ fn patch_latex_preamble(rendered: &str) -> String {
 }
 
 fn latex_engine() -> &'static str {
-    if Command::new("xelatex").arg("--version").output().is_ok() {
-        "xelatex"
-    } else {
-        "pdflatex"
-    }
+    "pdflatex"
 }
 
 fn run_latex(engine: &str, output_dir: &Path, file_name: &str) -> std::io::Result<ExitStatus> {

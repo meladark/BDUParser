@@ -1,7 +1,7 @@
 .PHONY: build build_env test clean all \
 	ffi-build ffi-build-macos-arm64 ffi-build-linux-amd64 ffi-build-all \
 	ffi-go-test ffi-test ffi-tools ffi-package \
-	docker-test-image docker-test docker-test-latex help
+	docker-test-image docker-test docker-test-latex docker-test-ffi-latex help
 
 NATIVE_RUST_TARGET := aarch64-apple-darwin
 LINUX_AMD64_RUST_TARGET := x86_64-unknown-linux-gnu
@@ -103,8 +103,23 @@ docker-test-latex: docker-test-image
 		/bin/sh -lc 'cargo test test_latex -- --nocapture'
 	docker-compose stop
 
+docker-test-ffi-latex: docker-test-image
+	echo "Run Go FFI report-generation test in Debian container"
+	docker-compose up -d
+	docker run --rm \
+		--add-host=host.docker.internal:host-gateway \
+		-e BDU_TEST_DATABASE_URL=$(DOCKER_TEST_DB_URL) \
+		-e RUST_LOG=info \
+		-v "$(CURDIR):/workspace" \
+		-w /workspace \
+		$(DOCKER_TEST_IMAGE) \
+		/bin/sh -lc 'cargo build --manifest-path ffi/Cargo.toml --release && cd ffi/go && go test -run TestGenerateReportsViaFFI -v'
+	docker-compose stop
+
 clean:
 	cargo clean
+	cargo clean --manifest-path $(FFI_MANIFEST)
+	rm -rf "$(FFI_DIST_DIR)"
 	docker-compose stop
 	docker-compose rm 
 
@@ -124,4 +139,5 @@ help:
 		"ffi-package           Build and copy FFI artifacts into dist/ffi" \
 		"docker-test-image     Build Debian-based Docker image for test runs" \
 		"docker-test           Run Rust tests inside the Debian test image" \
-		"docker-test-latex     Run only test_latex inside the Debian test image"
+		"docker-test-latex     Run only test_latex inside the Debian test image" \
+		"docker-test-ffi-latex Run Go FFI report-generation test inside the Debian test image"

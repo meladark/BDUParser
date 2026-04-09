@@ -166,6 +166,7 @@ dist/ffi/linux-amd64/libbdu_parser_ffi.so
 
 FFI API возвращает JSON-строку, которую нужно освободить через `bdu_parser_free_string`.
 Сигнатуры вынесены в `ffi/bdu_parser_ffi.h`.
+Для логов можно зарегистрировать callback через `bdu_parser_set_log_callback`; в callback будет приходить готовая строка лога.
 
 Минимальный пример использования из Go через `cgo`:
 
@@ -177,6 +178,12 @@ package main
 #cgo LDFLAGS: -L${SRCDIR}/ffi/target/release -lbdu_parser_ffi
 #include "bdu_parser_ffi.h"
 #include <stdlib.h>
+
+extern void goBduLogCallback(const char *message);
+
+static inline void registerBduLogCallback() {
+	bdu_parser_set_log_callback(goBduLogCallback);
+}
 */
 import "C"
 
@@ -185,11 +192,18 @@ import (
 	"unsafe"
 )
 
+//export goBduLogCallback
+func goBduLogCallback(message *C.char) {
+	fmt.Printf("[bdu-parser] %s\n", C.GoString(message))
+}
+
 func main() {
 	postgresURL := C.CString("postgresql://bdu:bdu@localhost:5433/bdu")
 	sbomPath := C.CString("extra/cleaned_data.json")
 	defer C.free(unsafe.Pointer(postgresURL))
 	defer C.free(unsafe.Pointer(sbomPath))
+
+	C.registerBduLogCallback()
 
 	result := C.bdu_parser_find_json(postgresURL, sbomPath, C.bool(false))
 	defer C.bdu_parser_free_string(result)
@@ -197,6 +211,18 @@ func main() {
 	fmt.Println(C.GoString(result))
 }
 ```
+
+Callback для логов на стороне C/FFI:
+
+```c
+void on_bdu_log(const char *message) {
+    fprintf(stderr, "bdu-parser: %s\n", message);
+}
+
+bdu_parser_set_log_callback(on_bdu_log);
+```
+
+Чтобы отключить callback, передайте `NULL` в `bdu_parser_set_log_callback`.
 
 [БДУ]: https://bdu.fstec.ru/vul
 [Sbom]: https://github.com/CycloneDX
