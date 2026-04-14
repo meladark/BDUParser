@@ -6,7 +6,7 @@ use serde_derive::Serialize;
 use regex::Regex;
 use std::path::PathBuf;
 
-use calamine::{open_workbook, Reader, Xlsx};
+use calamine::{Reader, Xlsx, open_workbook};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
