@@ -1,7 +1,7 @@
 .PHONY: build build_env test clean all \
 	ffi-build ffi-build-macos-arm64 ffi-build-linux-amd64 ffi-build-all \
 	ffi-go-test ffi-test ffi-tools ffi-package \
-	docker-test-image docker-test docker-test-latex docker-test-ffi-latex help
+	docker-test-image docker-test docker-test-typst docker-test-ffi-typst help
 
 NATIVE_RUST_TARGET := aarch64-apple-darwin
 LINUX_AMD64_RUST_TARGET := x86_64-unknown-linux-gnu
@@ -91,8 +91,8 @@ docker-test: docker-test-image
 		/bin/sh -lc 'cargo test --package bdu_parser --lib -- --nocapture'
 	docker-compose stop
 
-docker-test-latex: docker-test-image
-	echo "Run test_latex in Debian container"
+docker-test-typst: docker-test-image
+	echo "Run test_typst in Debian container"
 	docker-compose up -d
 	docker run --rm \
 		--add-host=host.docker.internal:host-gateway \
@@ -100,10 +100,10 @@ docker-test-latex: docker-test-image
 		-v "$(CURDIR):/workspace" \
 		-w /workspace \
 		$(DOCKER_TEST_IMAGE) \
-		/bin/sh -lc 'cargo test test_latex -- --nocapture'
+		/bin/sh -lc 'cargo test test_typst -- --nocapture'
 	docker-compose stop
 
-docker-test-ffi-latex: docker-test-image
+docker-test-ffi-typst: docker-test-image
 	echo "Run Go FFI report-generation test in Debian container"
 	docker-compose up -d
 	docker run --rm \
@@ -139,5 +139,5 @@ help:
 		"ffi-package           Build and copy FFI artifacts into dist/ffi" \
 		"docker-test-image     Build Debian-based Docker image for test runs" \
 		"docker-test           Run Rust tests inside the Debian test image" \
-		"docker-test-latex     Run only test_latex inside the Debian test image" \
-		"docker-test-ffi-latex Run Go FFI report-generation test inside the Debian test image"
+		"docker-test-typst     Run only test_typst inside the Debian test image" \
+		"docker-test-ffi-typst Run Go FFI report-generation test inside the Debian test image"

@@ -829,6 +829,48 @@ impl BD {
     }
 }
 
+pub fn load_sbom_components(foo: &String) -> Result<Vec<sbom5::Component>, String> {
+    info!("Loading SBOM components for report summary from {}", foo);
+    if cfg!(target_os = "windows") {
+        error!("SBOM analysis is not supported on Windows");
+        return Err("Windows platform doesn`t support yet".to_string());
+    }
+
+    process_file(foo).map_err(|e| format!("Failed to normalize SBOM file {}: {}", foo, e))?;
+    let output = run_command(
+        Command::new("cyclonedx").arg("convert").args([
+            "--input-file",
+            foo,
+            "--output-format",
+            "json",
+            "--output-version",
+            "v1_5",
+        ]),
+        &format!("Failed to convert SBOM {} with cyclonedx", foo),
+    )?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Convert error for {}: Status: {} Stderr: {}",
+            foo,
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let cin = String::from_utf8(output.stdout)
+        .map_err(|e| format!("CycloneDX output for {} is not valid UTF-8: {}", foo, e))?;
+    let sbom = serde_json::from_str::<sbom5::Root>(&cin)
+        .map_err(|e| format!("CycloneDX output for {} is not valid JSON: {}", foo, e))?;
+
+    let mut components = Vec::new();
+    if let Some(sbom_components) = &sbom.components {
+        flatten_components(sbom_components, &mut components);
+    }
+
+    Ok(components)
+}
+
 use serde_json::Value;
 use std::error::Error;
 
@@ -863,6 +905,18 @@ fn remove_hashes_fields(value: &mut Value) {
             }
         }
         _ => {}
+    }
+}
+
+fn flatten_components(components: &[sbom5::Component], out: &mut Vec<sbom5::Component>) {
+    for component in components {
+        let mut flat = component.clone();
+        flat.components = None;
+        out.push(flat);
+
+        if let Some(children) = &component.components {
+            flatten_components(children, out);
+        }
     }
 }
 

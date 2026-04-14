@@ -22,6 +22,7 @@ type generateReportsResponse struct {
 	Vulnerabilities int    `json:"vulnerabilities"`
 	PDFPath         string `json:"pdf_path"`
 	XLSXPath        string `json:"xlsx_path"`
+	HTMLPath        string `json:"html_path"`
 }
 
 func testDatabaseURL() string {
@@ -67,12 +68,12 @@ func TestGenerateReportsViaFFI(t *testing.T) {
 	sbomPath := filepath.Join("..", "..", "extra", "cleaned_data.json")
 	reportBasePath := filepath.Join("..", "..", "dist", "ffi_go_test_report")
 	pdfPath := reportBasePath + ".pdf"
-	texPath := reportBasePath + ".tex"
 	xlsxPath := reportBasePath + ".xlsx"
+	htmlPath := reportBasePath + ".html"
 	t.Cleanup(func() {
 		_ = os.Remove(pdfPath)
-		_ = os.Remove(texPath)
 		_ = os.Remove(xlsxPath)
+		_ = os.Remove(htmlPath)
 	})
 
 	updateRaw := Update(databaseURL)
@@ -118,10 +119,16 @@ func TestGenerateReportsViaFFI(t *testing.T) {
 	if reportsResult.Data.XLSXPath != xlsxPath {
 		t.Fatalf("expected xlsx_path=%q, got %q", xlsxPath, reportsResult.Data.XLSXPath)
 	}
+	if reportsResult.Data.HTMLPath != htmlPath {
+		t.Fatalf("expected html_path=%q, got %q", htmlPath, reportsResult.Data.HTMLPath)
+	}
 	if _, err := os.Stat(pdfPath); err != nil {
 		t.Fatalf("expected generated PDF at %q: %v", pdfPath, err)
 	}
 	if _, err := os.Stat(xlsxPath); err != nil {
 		t.Fatalf("expected generated XLSX at %q: %v", xlsxPath, err)
+	}
+	if _, err := os.Stat(htmlPath); err != nil {
+		t.Fatalf("expected generated HTML at %q: %v", htmlPath, err)
 	}
 }

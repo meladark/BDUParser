@@ -4,7 +4,10 @@ use std::{
     sync::{Once, OnceLock, RwLock},
 };
 
-use bdu_parser::{bd::BD, get_excel, get_html, get_pdf};
+use bdu_parser::{
+    bd::{BD, load_sbom_components},
+    get_excel, get_html, get_pdf_with_components,
+};
 use log::{LevelFilter, Log, Metadata, Record};
 use serde::Serialize;
 
@@ -192,6 +195,7 @@ pub extern "C" fn bdu_parser_generate_reports(
 
         runtime.block_on(async move {
             let db = BD::new(&postgres_url).await?;
+            let components = load_sbom_components(&sbom_path)?;
             let vulns = db.find(&sbom_path, full).await?;
             let count = vulns.len();
 
@@ -202,7 +206,7 @@ pub extern "C" fn bdu_parser_generate_reports(
                 }));
             }
 
-            get_pdf(vulns.clone(), &report_name)?;
+            get_pdf_with_components(vulns.clone(), components, &report_name)?;
             get_excel(vulns.clone(), &report_name)?;
             get_html(vulns, &report_name)?;
 
