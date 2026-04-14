@@ -1,13 +1,16 @@
 #[cfg(test)]
 mod test {
-    use crate::{ bd::{ BD, Bugs }, bdu, get_excel, get_pdf, sbom5 };
-    use calamine::{ Reader, Xlsx, open_workbook };
+    use crate::{
+        bd::{BD, Bugs},
+        bdu, get_excel, get_html, get_pdf, sbom5,
+    };
+    use calamine::{Reader, Xlsx, open_workbook};
     use env_logger;
-    use log::info;
     use log::LevelFilter;
-    use std::{ env, fs };
+    use log::info;
     use std::sync::Once;
     use std::time::Instant;
+    use std::{env, fs};
 
     fn init_test_logger() {
         static INIT: Once = Once::new();
@@ -22,9 +25,8 @@ mod test {
     }
 
     fn test_database_url() -> String {
-        env::var("BDU_TEST_DATABASE_URL").unwrap_or_else(|_|
-            "postgresql://bdu:bdu@localhost:5438/bdu".to_string()
-        )
+        env::var("BDU_TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://bdu:bdu@localhost:5438/bdu".to_string())
     }
 
     #[tokio::test]
@@ -56,7 +58,9 @@ mod test {
                         i.component.name,
                         match i.component.version {
                             Some(v) => v,
-                            None => { "None".to_string() }
+                            None => {
+                                "None".to_string()
+                            }
                         },
                         i.vuln.id
                     );
@@ -83,7 +87,9 @@ mod test {
                         i.component.name,
                         match i.component.version {
                             Some(v) => v,
-                            None => { "None".to_string() }
+                            None => {
+                                "None".to_string()
+                            }
                         },
                         i.vuln.id
                     );
@@ -101,7 +107,8 @@ mod test {
         //let t = BD::default().await.expect("Error connect");
         let t = BD::new(&test_database_url()).await.expect("Error New");
         let bugs = t
-            .find(&"extra/cleaned_data.json".to_string(), true).await
+            .find(&"extra/cleaned_data.json".to_string(), true)
+            .await
             .expect("failed to collect vulnerabilities for PDF report");
 
         get_pdf(bugs, &file_name).expect("failed to create PDF report");
@@ -160,26 +167,71 @@ mod test {
 
         get_excel(vec![bug], &file_name).expect("failed to create xlsx report");
 
-        let mut workbook: Xlsx<_> = open_workbook(&report_path).expect(
-            "failed to open xlsx report"
-        );
-        let range = workbook.worksheet_range("Report").expect("failed to read report sheet");
+        let mut workbook: Xlsx<_> =
+            open_workbook(&report_path).expect("failed to open xlsx report");
+        let range = workbook
+            .worksheet_range("Report")
+            .expect("failed to read report sheet");
 
-        assert_eq!(range.get_value((0, 0)).expect("missing header").to_string(), "Компонент");
-        assert_eq!(range.get_value((1, 0)).expect("missing component").to_string(), "openssl");
-        assert_eq!(range.get_value((1, 1)).expect("missing version").to_string(), "1.1.1");
-        assert_eq!(range.get_value((1, 2)).expect("missing vuln id").to_string(), "BDU:2024-0001");
         assert_eq!(
-            range.get_value((1, 3)).expect("missing vuln name").to_string(),
+            range.get_value((0, 0)).expect("missing header").to_string(),
+            "Компонент"
+        );
+        assert_eq!(
+            range
+                .get_value((1, 0))
+                .expect("missing component")
+                .to_string(),
+            "openssl"
+        );
+        assert_eq!(
+            range
+                .get_value((1, 1))
+                .expect("missing version")
+                .to_string(),
+            "1.1.1"
+        );
+        assert_eq!(
+            range
+                .get_value((1, 2))
+                .expect("missing vuln id")
+                .to_string(),
+            "BDU:2024-0001"
+        );
+        assert_eq!(
+            range
+                .get_value((1, 3))
+                .expect("missing vuln name")
+                .to_string(),
             "Тестовая уязвимость"
         );
         assert_eq!(
-            range.get_value((1, 4)).expect("missing vulnerable versions").to_string(),
+            range
+                .get_value((1, 4))
+                .expect("missing vulnerable versions")
+                .to_string(),
             "Уязвима с версии 1.0.0 по версию 1.1.1 включительно"
         );
 
         fs::remove_file(report_path).expect("failed to delete xlsx report");
     }
+
+    #[tokio::test]
+    async fn test_html() {
+        let file_name = "dist/test_html_report".to_string();
+        let t = BD::new(&test_database_url()).await.expect("Error New");
+        let bugs = t
+            .find(&"extra/cleaned_data.json".to_string(), true)
+            .await
+            .expect("failed to collect vulnerabilities for HTML report");
+
+        get_html(bugs, &file_name).expect("failed to create HTML report");
+
+        assert!(std::path::Path::new(&format!("{}.html", file_name)).exists());
+
+        // fs::remove_file(format!("{}.html", file_name)).expect("failed to delete html report");
+    }
+
     #[tokio::test]
     async fn test_typst() {}
 }

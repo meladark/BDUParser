@@ -1,10 +1,10 @@
 use std::{
     env,
-    ffi::{c_char, CStr, CString},
+    ffi::{CStr, CString, c_char},
     sync::{Once, OnceLock, RwLock},
 };
 
-use bdu_parser::{bd::BD, get_excel, get_pdf};
+use bdu_parser::{bd::BD, get_excel, get_html, get_pdf};
 use log::{LevelFilter, Log, Metadata, Record};
 use serde::Serialize;
 
@@ -203,13 +203,15 @@ pub extern "C" fn bdu_parser_generate_reports(
             }
 
             get_pdf(vulns.clone(), &report_name)?;
-            get_excel(vulns, &report_name)?;
+            get_excel(vulns.clone(), &report_name)?;
+            get_html(vulns, &report_name)?;
 
             Ok(serde_json::json!({
                 "generated": true,
                 "vulnerabilities": count,
                 "pdf_path": format!("{}.pdf", report_name),
                 "xlsx_path": format!("{}.xlsx", report_name),
+                "html_path": format!("{}.html", report_name),
             }))
         })
     })();
