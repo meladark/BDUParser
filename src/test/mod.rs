@@ -36,6 +36,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[ignore = "requires external BDU dataset download"]
     async fn test_postgres() {
         init_test_logger();
         info!("Start test_postgres!!!!!");
