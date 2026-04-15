@@ -18,11 +18,9 @@ services:
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
     command: -p 5433
-    # networks:
-    #   svacer:
-    # healthcheck:
-    #   test: pg_isready -U svace
-    #   interval: 8s
-    #   start_period: 16s
-    #   timeout: 4s
-    #   retries: 4
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bdu -d bdu -p 5433"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
