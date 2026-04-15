@@ -6,10 +6,12 @@ postgres_data
 .vscode
 cyclonedx-*
 out
-vull.xlsx
 *.log
 *.aux
 *.out
 *.pdf
 *.tex
 *.toc
+ffi/target/
+dist/
+*.xlsx
