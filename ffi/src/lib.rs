@@ -6,7 +6,7 @@ use std::{
 
 use bdu_parser::{
     bd::{BD, load_sbom_components},
-    get_excel, get_html, get_pdf_with_components,
+    get_excel, get_html, get_pdf_with_components_and_source,
 };
 use log::{LevelFilter, Log, Metadata, Record};
 use serde::Serialize;
@@ -206,7 +206,12 @@ pub extern "C" fn bdu_parser_generate_reports(
                 }));
             }
 
-            get_pdf_with_components(vulns.clone(), components, &report_name)?;
+            get_pdf_with_components_and_source(
+                vulns.clone(),
+                components,
+                Some(&sbom_path),
+                &report_name,
+            )?;
             get_excel(vulns.clone(), &report_name)?;
             get_html(vulns, &report_name)?;
 

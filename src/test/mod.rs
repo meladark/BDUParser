@@ -6,6 +6,7 @@ mod test {
         get_excel,
         get_html,
         get_pdf_with_components,
+        get_pdf_with_components_and_source,
         sbom5,
     };
     use calamine::{ Reader, Xlsx, open_workbook };
@@ -114,7 +115,12 @@ mod test {
             .find(&"extra/cleaned_data.json".to_string(), true).await
             .expect("failed to collect vulnerabilities for PDF report");
 
-        get_pdf_with_components(bugs, components, &file_name).expect("failed to create PDF report");
+        get_pdf_with_components_and_source(
+            bugs,
+            components,
+            Some("extra/cleaned_data.json"),
+            &file_name,
+        ).expect("failed to create PDF report");
 
         assert!(std::path::Path::new(&format!("{}.pdf", file_name)).exists());
 

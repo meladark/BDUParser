@@ -3,7 +3,10 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 use bd::Bugs;
 use comemo::Prehashed;
 use log::*;
+use md5::Md5;
 use rust_xlsxwriter::Workbook;
+use sha2::{Digest, Sha256};
+use streebog::Streebog256;
 use typst::{
     Library, World,
     diag::{FileError, FileResult, SourceDiagnostic},
@@ -35,12 +38,22 @@ pub fn get_pdf_with_components(
     components: Vec<sbom5::Component>,
     name: &String,
 ) -> Result<(), String> {
+    get_pdf_with_components_and_source(bugs, components, None, name)
+}
+
+pub fn get_pdf_with_components_and_source(
+    bugs: Vec<Bugs>,
+    components: Vec<sbom5::Component>,
+    source_path: Option<&str>,
+    name: &String,
+) -> Result<(), String> {
     info!(
         "Generating PDF report {}.pdf with {} vulnerabilities",
         name,
         bugs.len()
     );
-    let report_source = build_typst_report(&bugs, &components);
+    let source_hashes = source_path.map(hash_source_file).transpose()?;
+    let report_source = build_typst_report(&bugs, &components, source_hashes.as_ref());
     let world = TypstReportWorld::new(report_source);
     let mut tracer = Tracer::new();
     let document = typst::compile(&world, &mut tracer).map_err(format_typst_diagnostics)?;
@@ -264,15 +277,45 @@ impl World for TypstReportWorld {
     }
 }
 
-fn build_typst_report(bugs: &[Bugs], components: &[sbom5::Component]) -> String {
+struct ReportSourceHashes {
+    md5: String,
+    sha256: String,
+    streebog256: String,
+}
+
+fn hash_source_file(source_path: &str) -> Result<ReportSourceHashes, String> {
+    let bytes = fs::read(source_path)
+        .map_err(|e| format!("Failed to read source file {} for hashing: {}", source_path, e))?;
+
+    Ok(ReportSourceHashes {
+        md5: hex::encode(Md5::digest(&bytes)),
+        sha256: hex::encode(Sha256::digest(&bytes)),
+        streebog256: hex::encode(Streebog256::digest(&bytes)),
+    })
+}
+
+fn build_typst_report(
+    bugs: &[Bugs],
+    components: &[sbom5::Component],
+    source_hashes: Option<&ReportSourceHashes>,
+) -> String {
     let mut report = String::from(
         "#set page(paper: \"a4\", margin: (x: 18mm, y: 18mm))\n#set document(title: \"Отчет Карги\", author: (\"BDUParser\",))\n#set text(lang: \"ru\", font: \"Linux Libertine O\", size: 10pt)\n#set par(justify: true, leading: 0.75em)\n#set heading(numbering: \"1.1.1\")\n#show heading.where(level: 1): set text(size: 18pt, weight: \"bold\")\n#show heading.where(level: 2): set text(size: 16pt, weight: \"bold\")\n#show heading.where(level: 3): set text(size: 13pt, weight: \"bold\")\n\n#v(35%)\n#align(center)[\n  #text(size: 24pt, weight: \"bold\")[Отчет Карги]\n\n",
     );
     report.push_str(&format!(
-        "  #text(size: 12pt)[BDUParser v{}]\n\n  #text(size: 11pt, fill: rgb(102, 102, 102))[Найдено уязвимостей: {}]\n]\n\n#pagebreak()\n\n#align(center)[#text(size: 20pt, weight: \"bold\")[Содержание]]\n\n#outline()\n\n#pagebreak()\n\n",
+        "  #text(size: 12pt)[BDUParser v{}]\n\n  #text(size: 11pt, fill: rgb(102, 102, 102))[Найдено уязвимостей: {}]\n\n",
         env!("CARGO_PKG_VERSION"),
         bugs.len()
     ));
+    if let Some(source_hashes) = source_hashes {
+        report.push_str(&format!(
+            "  #text(size: 9pt, fill: rgb(102, 102, 102))[MD5: {}]\n\n  #text(size: 9pt, fill: rgb(102, 102, 102))[SHA-256: {}]\n\n  #text(size: 9pt, fill: rgb(102, 102, 102))[Streebog-256: {}]\n",
+            source_hashes.md5,
+            source_hashes.sha256,
+            source_hashes.streebog256
+        ));
+    }
+    report.push_str("]\n\n#pagebreak()\n\n#align(center)[#text(size: 20pt, weight: \"bold\")[Содержание]]\n\n#outline()\n\n#pagebreak()\n\n");
     report.push_str(&build_typst_summary_table(bugs, components));
     report.push_str("= Уязвимости\n\n");
 
